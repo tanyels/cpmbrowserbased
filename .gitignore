@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+src/renderer/node_modules/
+
+# Build outputs
+dist/
+release/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test/Sample data files (user-generated)
+*.xlsx
+!Sample_KPI_Master_File.xlsx
+
+# Electron cache
+.electron/
