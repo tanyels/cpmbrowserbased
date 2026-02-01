@@ -54,6 +54,10 @@ function AppContent() {
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+
+      <footer className="app-footer">
+        Built by Lamosa L.L.C. - FZ
+      </footer>
     </div>
   );
 }
