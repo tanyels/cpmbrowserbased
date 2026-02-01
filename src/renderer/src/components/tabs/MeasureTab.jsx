@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { BarChart3 } from 'lucide-react';
 
 // Safe expression evaluator (no eval/Function)
 // Supports: +, -, *, /, parentheses for grouping, and functions: SUM(), AVG(), MIN(), MAX(), FIRST(), LAST(), ABS()
@@ -577,7 +578,7 @@ function MeasureListView({
       {/* Measures Grid */}
       {measures.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📊</div>
+          <div className="empty-state-icon"><BarChart3 size={48} /></div>
           <h3>No Measures Yet</h3>
           <p>Create your first measure to start calculating KPI achievements automatically.</p>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
@@ -2066,7 +2067,7 @@ function DataEntryView({
                             return (
                               <tr key={`measure-${mIdx}`} className="measure-ref-row">
                                 <td className="param-name">
-                                  <span className="measure-ref-label">📊 {refMeasure.Name}</span>
+                                  <span className="measure-ref-label"><BarChart3 size={14} /> {refMeasure.Name}</span>
                                 </td>
                                 {months.map(month => {
                                   const monthKey = getMonthKey(month.idx);
@@ -2146,7 +2147,7 @@ function DataEntryView({
                                   title={error || ''}
                                 >
                                   {value !== null && value !== undefined
-                                    ? value.toFixed(1)
+                                    ? value.toFixed(0)
                                     : error
                                       ? '⚠'
                                       : '—'

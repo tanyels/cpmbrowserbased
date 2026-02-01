@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { useLicense } from '../../contexts/LicenseContext';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 
 function KPIsTab() {
   const {
@@ -10,6 +12,12 @@ function KPIsTab() {
     objectives,
     businessUnits
   } = useStrategy();
+
+  const { isFeatureAllowed, isReadOnly, featureLimits, isInTrial } = useLicense();
+
+  // Check if we can add more KPIs
+  const canAddMoreKPIs = isFeatureAllowed('kpis', kpis.length);
+  const kpiLimit = featureLimits?.MAX_KPIS;
 
   const [filterLevel, setFilterLevel] = useState('');
   const [filterL2, setFilterL2] = useState(''); // For L3 cascading
@@ -118,6 +126,57 @@ function KPIsTab() {
   const totalKPIWeight = useMemo(() => {
     return filteredKPIs.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
   }, [filteredKPIs]);
+
+  // Get the selected objective and its weight budget
+  const selectedObjective = useMemo(() => {
+    if (filterObjective) {
+      return objectives.find(obj => obj.Code === filterObjective);
+    }
+    return null;
+  }, [filterObjective, objectives]);
+
+  // Get objective weight budget - for L1 objectives, the weight is on the objective itself
+  // For all levels, the KPIs should sum to the objective's Weight field
+  const objectiveWeightBudget = useMemo(() => {
+    if (selectedObjective) {
+      return parseFloat(selectedObjective.Weight) || 0;
+    }
+    return 0;
+  }, [selectedObjective]);
+
+  // Group KPIs by objective when filtering by BU (to show per-objective weight validation)
+  const kpisByObjective = useMemo(() => {
+    if (!filterBU || filterObjective) return null;
+
+    const grouped = {};
+    filteredKPIs.forEach(kpi => {
+      if (!grouped[kpi.Objective_Code]) {
+        grouped[kpi.Objective_Code] = [];
+      }
+      grouped[kpi.Objective_Code].push(kpi);
+    });
+    return grouped;
+  }, [filteredKPIs, filterBU, filterObjective]);
+
+  // Calculate weight summaries per objective
+  const objectiveWeightSummaries = useMemo(() => {
+    if (!kpisByObjective) return null;
+
+    const summaries = {};
+    Object.entries(kpisByObjective).forEach(([objCode, objKpis]) => {
+      const obj = objectives.find(o => o.Code === objCode);
+      const budget = parseFloat(obj?.Weight) || 0;
+      const total = objKpis.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
+      summaries[objCode] = {
+        objective: obj,
+        budget,
+        total,
+        kpiCount: objKpis.length,
+        isValid: Math.abs(total - budget) < 0.01
+      };
+    });
+    return summaries;
+  }, [kpisByObjective, objectives]);
 
   // Get the selected BU name for display
   const selectedBUName = useMemo(() => {
@@ -256,38 +315,102 @@ function KPIsTab() {
           </select>
         </div>
 
-        <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => setShowAddForm(true)}
+          disabled={!canAddMoreKPIs || isReadOnly()}
+        >
           + Add KPI
         </button>
       </div>
 
-      {/* Total Weight Indicator - only show when a specific BU is selected */}
-      {filterBU && filteredKPIs.length > 0 && (
+      {/* License limit warning */}
+      {isInTrial() && !canAddMoreKPIs && (
+        <div className="limit-warning">
+          <span className="limit-warning-icon"><AlertTriangle size={14} /></span>
+          <div className="limit-warning-text">
+            <strong>KPI Limit Reached</strong>
+            <span>Trial is limited to {kpiLimit} KPIs. </span>
+          </div>
+          <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+            Upgrade License
+          </a>
+        </div>
+      )}
+
+      {/* Read-only warning */}
+      {isReadOnly() && (
+        <div className="limit-warning">
+          <span className="limit-warning-icon">🔒</span>
+          <div className="limit-warning-text">
+            <strong>Read-Only Mode</strong>
+            <span>Your license has expired. You cannot make changes.</span>
+          </div>
+          <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+            Renew License
+          </a>
+        </div>
+      )}
+
+      {/* Weight Indicator - when a specific objective is selected */}
+      {filterObjective && selectedObjective && filteredKPIs.length > 0 && (
         <div className="kpi-weight-summary">
           <div className="weight-summary-header">
             <span className="weight-summary-title">
-              KPI Weights for {selectedBUName}
+              KPI Weights for "{selectedObjective.Name}"
             </span>
             <span className="weight-summary-count">
-              {filteredKPIs.length} KPI{filteredKPIs.length !== 1 ? 's' : ''}
+              {filteredKPIs.length} KPI{filteredKPIs.length !== 1 ? 's' : ''} | Target: {objectiveWeightBudget}%
             </span>
           </div>
           <div className="weight-summary-bar">
             <div
-              className={`weight-bar-fill ${totalKPIWeight === 100 ? 'complete' : totalKPIWeight > 100 ? 'over' : ''}`}
-              style={{ width: `${Math.min(totalKPIWeight, 100)}%` }}
+              className={`weight-bar-fill ${Math.abs(totalKPIWeight - objectiveWeightBudget) < 0.01 ? 'complete' : totalKPIWeight > objectiveWeightBudget ? 'over' : ''}`}
+              style={{ width: `${objectiveWeightBudget > 0 ? Math.min((totalKPIWeight / objectiveWeightBudget) * 100, 100) : 0}%` }}
             />
           </div>
-          <div className={`weight-summary-value ${totalKPIWeight === 100 ? 'valid' : totalKPIWeight > 100 ? 'over' : 'under'}`}>
-            <span className="weight-total">{totalKPIWeight.toFixed(1)}%</span>
+          <div className={`weight-summary-value ${Math.abs(totalKPIWeight - objectiveWeightBudget) < 0.01 ? 'valid' : totalKPIWeight > objectiveWeightBudget ? 'over' : 'under'}`}>
+            <span className="weight-total">{totalKPIWeight.toFixed(0)}% / {objectiveWeightBudget}%</span>
             <span className="weight-status">
-              {totalKPIWeight === 100
-                ? '✓ Complete'
-                : totalKPIWeight > 100
-                  ? `${(totalKPIWeight - 100).toFixed(1)}% over`
-                  : `${(100 - totalKPIWeight).toFixed(1)}% remaining`
+              {Math.abs(totalKPIWeight - objectiveWeightBudget) < 0.01
+                ? <><CheckCircle size={12} /> Complete</>
+                : totalKPIWeight > objectiveWeightBudget
+                  ? `${(totalKPIWeight - objectiveWeightBudget).toFixed(0)}% over limit`
+                  : `${(objectiveWeightBudget - totalKPIWeight).toFixed(0)}% remaining`
               }
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Per-objective weight summaries when filtering by BU (no specific objective selected) */}
+      {filterBU && !filterObjective && objectiveWeightSummaries && Object.keys(objectiveWeightSummaries).length > 0 && (
+        <div className="kpi-weight-summaries-grid">
+          <div className="weight-summaries-header">
+            <h4>KPI Weight Distribution by Objective</h4>
+            <span className="weight-summaries-subtitle">Each objective's KPIs should sum to the objective's weight</span>
+          </div>
+          <div className="weight-summaries-list">
+            {Object.entries(objectiveWeightSummaries).map(([objCode, summary]) => (
+              <div key={objCode} className={`objective-weight-summary ${summary.isValid ? 'valid' : 'invalid'}`}>
+                <div className="obj-summary-header">
+                  <span className="obj-name">{summary.objective?.Name || objCode}</span>
+                  <span className={`obj-status ${summary.isValid ? 'valid' : 'invalid'}`}>
+                    {summary.isValid ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                  </span>
+                </div>
+                <div className="obj-summary-bar">
+                  <div
+                    className={`obj-bar-fill ${summary.isValid ? 'complete' : summary.total > summary.budget ? 'over' : ''}`}
+                    style={{ width: `${summary.budget > 0 ? Math.min((summary.total / summary.budget) * 100, 100) : 0}%` }}
+                  />
+                </div>
+                <div className="obj-summary-details">
+                  <span className="obj-kpi-count">{summary.kpiCount} KPI{summary.kpiCount !== 1 ? 's' : ''}</span>
+                  <span className="obj-weight-ratio">{summary.total.toFixed(0)}% / {summary.budget}%</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -21,5 +21,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dialogs
   showConfirmDialog: (title, message) => ipcRenderer.invoke('show-confirm-dialog', { title, message }),
-  showUnsavedWarning: () => ipcRenderer.invoke('show-unsaved-warning')
+  showUnsavedWarning: () => ipcRenderer.invoke('show-unsaved-warning'),
+
+  // License management
+  license: {
+    getState: () => ipcRenderer.invoke('license:get-state'),
+    getData: () => ipcRenderer.invoke('license:get-data'),
+    activate: (licenseKey, companyInfo) => ipcRenderer.invoke('license:activate', licenseKey, companyInfo),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    startTrial: () => ipcRenderer.invoke('license:start-trial'),
+    getTrialStatus: () => ipcRenderer.invoke('license:get-trial-status'),
+    getLimits: () => ipcRenderer.invoke('license:get-limits'),
+    validate: () => ipcRenderer.invoke('license:validate'),
+    clear: () => ipcRenderer.invoke('license:clear'),
+    getConfig: () => ipcRenderer.invoke('license:get-config'),
+    getCompanyLogo: () => ipcRenderer.invoke('license:get-company-logo')
+  }
 });

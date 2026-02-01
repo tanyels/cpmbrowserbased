@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
 const StrategyContext = createContext(null);
 
@@ -61,6 +61,54 @@ export const StrategyProvider = ({ children }) => {
     currencySymbol: '$'
   });
 
+  // BU Scorecard Configuration
+  // Stores the weights each BU assigns to parent objectives
+  // L2 BUs: assign weights to SOs (L1 Objectives)
+  // L3 BUs: assign weights to L2 Objectives
+  // Format: { buCode: { parentObjCode: weight, ... } }
+  const [buScorecardConfig, setBuScorecardConfig] = useState({});
+
+  // Track if we're currently loading to avoid marking changes during load
+  const isLoadingRef = useRef(false);
+
+  // Ensure operational objectives exist for all business units
+  useEffect(() => {
+    if (businessUnits.length === 0) return;
+
+    const missingOperationalObjs = [];
+    businessUnits.forEach(bu => {
+      const opObjCode = `OBJ_${bu.Level}_OPERATIONAL_${bu.Code}`;
+      const hasOperational = objectives.some(
+        obj => obj.Is_Operational && obj.Business_Unit_Code === bu.Code
+      );
+
+      if (!hasOperational) {
+        missingOperationalObjs.push({
+          Code: opObjCode,
+          Name: 'Operational',
+          Name_AR: 'تشغيلي',
+          Description: 'Operational objective for non-strategic KPIs',
+          Level: bu.Level,
+          Business_Unit_Code: bu.Code,
+          Parent_Objective_Code: '',
+          Pillar_Code: '',
+          Perspective_Code: '',
+          Weight: 0,
+          Status: 'Active',
+          Is_Operational: true
+        });
+      }
+    });
+
+    if (missingOperationalObjs.length > 0) {
+      setObjectives(prev => [...prev, ...missingOperationalObjs]);
+      // Only mark as unsaved if we're not in the middle of loading
+      if (!isLoadingRef.current) {
+        setHasUnsavedChanges(true);
+      }
+    }
+  }, [businessUnits, objectives]);
+
   // Navigation state
   const [selectedLevel, setSelectedLevel] = useState('L1');
   const [selectedBusinessUnit, setSelectedBusinessUnit] = useState(null);
@@ -94,6 +142,7 @@ export const StrategyProvider = ({ children }) => {
   // Load file
   const loadFile = useCallback(async (path) => {
     setIsLoading(true);
+    isLoadingRef.current = true;
     try {
       console.log('=== LOAD FILE CALLED ===');
       console.log('LOAD - path:', path);
@@ -125,8 +174,13 @@ export const StrategyProvider = ({ children }) => {
         setEmployeeKpis(result.data.employeeKpis || []);
         setEmployeeAchievements(result.data.employeeAchievements || {});
         setSettings(prev => ({ ...prev, ...(result.data.settings || {}) }));
+        setBuScorecardConfig(result.data.buScorecardConfig || {});
         setHasUnsavedChanges(false);
         await window.electronAPI.setLastFilePath(path);
+        // Clear loading ref after effects have had time to run
+        setTimeout(() => {
+          isLoadingRef.current = false;
+        }, 100);
         return { success: true };
       } else {
         return { success: false, error: result.error };
@@ -174,6 +228,7 @@ export const StrategyProvider = ({ children }) => {
       organizationName: '',
       currencySymbol: '$'
     });
+    setBuScorecardConfig({});
     setHasUnsavedChanges(false);
   }, []);
 
@@ -209,7 +264,8 @@ export const StrategyProvider = ({ children }) => {
         personalObjectives,
         employeeKpis,
         employeeAchievements,
-        settings
+        settings,
+        buScorecardConfig
       };
 
       const result = await window.electronAPI.saveStrategyFile(filePath, data);
@@ -222,7 +278,7 @@ export const StrategyProvider = ({ children }) => {
     } finally {
       setIsSaving(false);
     }
-  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings]);
+  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
 
   // Create new file
   const createNewFile = useCallback(async () => {
@@ -833,6 +889,294 @@ export const StrategyProvider = ({ children }) => {
   }, []);
 
   // ============================================
+  // BU SCORECARD CONFIG
+  // ============================================
+
+  // Set the weight a BU assigns to a parent objective
+  // For L2 BUs: parentObjCode is an SO (L1 Objective)
+  // For L3 BUs: parentObjCode is an L2 Objective
+  const setBuParentWeight = useCallback((buCode, parentObjCode, weight) => {
+    setBuScorecardConfig(prev => ({
+      ...prev,
+      [buCode]: {
+        ...(prev[buCode] || {}),
+        [parentObjCode]: parseFloat(weight) || 0
+      }
+    }));
+    setHasUnsavedChanges(true);
+  }, []);
+
+  // Remove a parent objective from a BU's scorecard
+  const removeBuParentWeight = useCallback((buCode, parentObjCode) => {
+    setBuScorecardConfig(prev => {
+      const newConfig = { ...prev };
+      if (newConfig[buCode]) {
+        const { [parentObjCode]: removed, ...rest } = newConfig[buCode];
+        newConfig[buCode] = rest;
+        if (Object.keys(newConfig[buCode]).length === 0) {
+          delete newConfig[buCode];
+        }
+      }
+      return newConfig;
+    });
+    setHasUnsavedChanges(true);
+  }, []);
+
+  // Get all parent objective weights for a BU
+  const getBuParentWeights = useCallback((buCode) => {
+    return buScorecardConfig[buCode] || {};
+  }, [buScorecardConfig]);
+
+  // Get total weight assigned to parent objectives for a BU
+  const getBuTotalParentWeight = useCallback((buCode) => {
+    const weights = buScorecardConfig[buCode] || {};
+    return Object.values(weights).reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
+  }, [buScorecardConfig]);
+
+  // ============================================
+  // WEIGHT VALIDATION HELPERS
+  // ============================================
+
+  // Validate L1 weights: Pillars → SOs → KPIs
+  // Returns: { pillarCode: { pillarWeight, soTotalWeight, isValid, sos: { soCode: { soWeight, kpiTotalWeight, isValid } } } }
+  const validateL1Weights = useCallback(() => {
+    const result = {};
+    const l1Objectives = objectives.filter(o => o.Level === 'L1' && o.Status === 'Active' && !o.Is_Operational);
+
+    pillars.filter(p => p.Status === 'Active').forEach(pillar => {
+      const pillarSOs = l1Objectives.filter(o => o.Pillar_Code === pillar.Code);
+      const soTotalWeight = pillarSOs.reduce((sum, so) => sum + (parseFloat(so.Weight) || 0), 0);
+
+      result[pillar.Code] = {
+        pillarWeight: parseFloat(pillar.Weight) || 0,
+        soTotalWeight,
+        isValid: Math.abs(soTotalWeight - (parseFloat(pillar.Weight) || 0)) < 0.01,
+        sos: {}
+      };
+
+      pillarSOs.forEach(so => {
+        const soKPIs = kpis.filter(k => k.Objective_Code === so.Code && k.Review_Status !== 'Retired');
+        const kpiTotalWeight = soKPIs.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
+
+        result[pillar.Code].sos[so.Code] = {
+          soWeight: parseFloat(so.Weight) || 0,
+          kpiTotalWeight,
+          isValid: Math.abs(kpiTotalWeight - (parseFloat(so.Weight) || 0)) < 0.01
+        };
+      });
+    });
+
+    return result;
+  }, [pillars, objectives, kpis]);
+
+  // Validate L2 weights for a specific BU: Parent SOs → L2 Objs → KPIs
+  // Returns: { soCode: { soWeight, objTotalWeight, isValid, objectives: { objCode: { objWeight, kpiTotalWeight, isValid } } } }
+  const validateL2Weights = useCallback((buCode) => {
+    const result = {};
+    const buParentWeights = buScorecardConfig[buCode] || {};
+    const l2Objectives = objectives.filter(o =>
+      o.Level === 'L2' &&
+      o.Business_Unit_Code === buCode &&
+      o.Status === 'Active' &&
+      !o.Is_Operational
+    );
+
+    // Group L2 objectives by their parent SO
+    Object.entries(buParentWeights).forEach(([soCode, soWeight]) => {
+      const soObjectives = l2Objectives.filter(o => o.Parent_Objective_Code === soCode);
+      const objTotalWeight = soObjectives.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
+
+      result[soCode] = {
+        soWeight: parseFloat(soWeight) || 0,
+        objTotalWeight,
+        isValid: Math.abs(objTotalWeight - (parseFloat(soWeight) || 0)) < 0.01,
+        objectives: {}
+      };
+
+      soObjectives.forEach(obj => {
+        const objKPIs = kpis.filter(k => k.Objective_Code === obj.Code && k.Review_Status !== 'Retired');
+        const kpiTotalWeight = objKPIs.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
+
+        result[soCode].objectives[obj.Code] = {
+          objWeight: parseFloat(obj.Weight) || 0,
+          kpiTotalWeight,
+          isValid: Math.abs(kpiTotalWeight - (parseFloat(obj.Weight) || 0)) < 0.01
+        };
+      });
+    });
+
+    return result;
+  }, [buScorecardConfig, objectives, kpis]);
+
+  // Validate L3 weights for a specific BU: Parent L2 Objs → L3 Objs → KPIs
+  const validateL3Weights = useCallback((buCode) => {
+    const result = {};
+    const buParentWeights = buScorecardConfig[buCode] || {};
+    const l3Objectives = objectives.filter(o =>
+      o.Level === 'L3' &&
+      o.Business_Unit_Code === buCode &&
+      o.Status === 'Active' &&
+      !o.Is_Operational
+    );
+
+    // Group L3 objectives by their parent L2 objective
+    Object.entries(buParentWeights).forEach(([l2ObjCode, l2ObjWeight]) => {
+      const l3Objs = l3Objectives.filter(o => o.Parent_Objective_Code === l2ObjCode);
+      const objTotalWeight = l3Objs.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
+
+      result[l2ObjCode] = {
+        parentWeight: parseFloat(l2ObjWeight) || 0,
+        objTotalWeight,
+        isValid: Math.abs(objTotalWeight - (parseFloat(l2ObjWeight) || 0)) < 0.01,
+        objectives: {}
+      };
+
+      l3Objs.forEach(obj => {
+        const objKPIs = kpis.filter(k => k.Objective_Code === obj.Code && k.Review_Status !== 'Retired');
+        const kpiTotalWeight = objKPIs.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
+
+        result[l2ObjCode].objectives[obj.Code] = {
+          objWeight: parseFloat(obj.Weight) || 0,
+          kpiTotalWeight,
+          isValid: Math.abs(kpiTotalWeight - (parseFloat(obj.Weight) || 0)) < 0.01
+        };
+      });
+    });
+
+    return result;
+  }, [buScorecardConfig, objectives, kpis]);
+
+  // Get available parent objectives for a BU to add to its scorecard
+  // For L2 BU: returns L1 Objectives (SOs) not yet in scorecard
+  // For L3 BU: returns L2 Objectives from parent L2 BU not yet in scorecard
+  const getAvailableParentObjectives = useCallback((buCode) => {
+    const bu = businessUnits.find(b => b.Code === buCode);
+    if (!bu) return [];
+
+    const currentWeights = buScorecardConfig[buCode] || {};
+    const assignedCodes = Object.keys(currentWeights);
+
+    if (bu.Level === 'L2') {
+      // Return L1 Objectives (SOs) that aren't already assigned
+      return objectives.filter(o =>
+        o.Level === 'L1' &&
+        o.Status === 'Active' &&
+        !o.Is_Operational &&
+        !assignedCodes.includes(o.Code)
+      );
+    } else if (bu.Level === 'L3') {
+      // Return L2 Objectives from parent L2 BU that aren't already assigned
+      const parentL2BU = bu.Parent_Code;
+      return objectives.filter(o =>
+        o.Level === 'L2' &&
+        o.Business_Unit_Code === parentL2BU &&
+        o.Status === 'Active' &&
+        !o.Is_Operational &&
+        !assignedCodes.includes(o.Code)
+      );
+    }
+
+    return [];
+  }, [businessUnits, objectives, buScorecardConfig]);
+
+  // Initialize BU Scorecard Config with parent objectives that have children
+  // For L2 BU: Auto-add SOs that have L2 objectives under this BU, using actual weight sums, plus Operational
+  // For L3 BU: Auto-add L2 objectives that have L3 objectives under this BU, using actual weight sums, plus Operational
+  const initializeBuScorecardConfig = useCallback((buCode) => {
+    const bu = businessUnits.find(b => b.Code === buCode);
+    if (!bu) return;
+
+    const currentConfig = buScorecardConfig[buCode] || {};
+    if (Object.keys(currentConfig).length > 0) return; // Already configured
+
+    const newConfig = {};
+
+    if (bu.Level === 'L2') {
+      // Find L2 objectives for this BU and their parent SOs
+      const buL2Objectives = objectives.filter(o =>
+        o.Level === 'L2' &&
+        o.Business_Unit_Code === buCode &&
+        o.Status === 'Active' &&
+        !o.Is_Operational
+      );
+
+      // Group L2 objectives by parent SO and sum their weights
+      const soWeightSums = {};
+      buL2Objectives.forEach(obj => {
+        if (obj.Parent_Objective_Code) {
+          if (!soWeightSums[obj.Parent_Objective_Code]) {
+            soWeightSums[obj.Parent_Objective_Code] = 0;
+          }
+          soWeightSums[obj.Parent_Objective_Code] += parseFloat(obj.Weight) || 0;
+        }
+      });
+
+      // Use actual weight sums from L2 objectives
+      Object.entries(soWeightSums).forEach(([soCode, weightSum]) => {
+        newConfig[soCode] = Math.round(weightSum * 10) / 10;
+      });
+
+      // Always add Operational with its KPI weight sum
+      const operationalObj = objectives.find(o =>
+        o.Level === 'L2' &&
+        o.Business_Unit_Code === buCode &&
+        o.Is_Operational &&
+        o.Status === 'Active'
+      );
+      if (operationalObj) {
+        const operationalKPIs = kpis.filter(k => k.Objective_Code === operationalObj.Code);
+        const operationalWeight = operationalKPIs.reduce((sum, k) => sum + (parseFloat(k.Weight) || 0), 0);
+        newConfig[operationalObj.Code] = Math.round(operationalWeight * 10) / 10;
+      }
+    } else if (bu.Level === 'L3') {
+      // Find L3 objectives for this BU and their parent L2 objectives
+      const buL3Objectives = objectives.filter(o =>
+        o.Level === 'L3' &&
+        o.Business_Unit_Code === buCode &&
+        o.Status === 'Active' &&
+        !o.Is_Operational
+      );
+
+      // Group L3 objectives by parent L2 and sum their weights
+      const l2WeightSums = {};
+      buL3Objectives.forEach(obj => {
+        if (obj.Parent_Objective_Code) {
+          if (!l2WeightSums[obj.Parent_Objective_Code]) {
+            l2WeightSums[obj.Parent_Objective_Code] = 0;
+          }
+          l2WeightSums[obj.Parent_Objective_Code] += parseFloat(obj.Weight) || 0;
+        }
+      });
+
+      // Use actual weight sums from L3 objectives
+      Object.entries(l2WeightSums).forEach(([l2Code, weightSum]) => {
+        newConfig[l2Code] = Math.round(weightSum * 10) / 10;
+      });
+
+      // Always add Operational with its KPI weight sum
+      const operationalObj = objectives.find(o =>
+        o.Level === 'L3' &&
+        o.Business_Unit_Code === buCode &&
+        o.Is_Operational &&
+        o.Status === 'Active'
+      );
+      if (operationalObj) {
+        const operationalKPIs = kpis.filter(k => k.Objective_Code === operationalObj.Code);
+        const operationalWeight = operationalKPIs.reduce((sum, k) => sum + (parseFloat(k.Weight) || 0), 0);
+        newConfig[operationalObj.Code] = Math.round(operationalWeight * 10) / 10;
+      }
+    }
+
+    if (Object.keys(newConfig).length > 0) {
+      setBuScorecardConfig(prev => ({
+        ...prev,
+        [buCode]: newConfig
+      }));
+      setHasUnsavedChanges(true);
+    }
+  }, [businessUnits, objectives, buScorecardConfig]);
+
+  // ============================================
   // TEAM MEMBERS
   // ============================================
 
@@ -1196,6 +1540,20 @@ export const StrategyProvider = ({ children }) => {
     // Admin Settings
     settings,
     updateSettings,
+
+    // BU Scorecard Config
+    buScorecardConfig,
+    setBuParentWeight,
+    removeBuParentWeight,
+    getBuParentWeights,
+    initializeBuScorecardConfig,
+    getBuTotalParentWeight,
+    getAvailableParentObjectives,
+
+    // Weight Validation
+    validateL1Weights,
+    validateL2Weights,
+    validateL3Weights,
 
     // Team Members
     teamMembers,

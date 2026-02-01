@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { useLicense } from '../../contexts/LicenseContext';
+import { AlertTriangle } from 'lucide-react';
 
 function DashboardTab() {
   const {
@@ -13,11 +15,13 @@ function DashboardTab() {
     getStats,
     exportReport
   } = useStrategy();
+  const { getCompanyInfo } = useLicense();
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState(null);
 
   const stats = useMemo(() => getStats(), [getStats]);
+  const companyInfo = getCompanyInfo();
 
   // Calculate pillar coverage with cascade breakdown and KPI status
   const pillarCoverage = useMemo(() => {
@@ -86,8 +90,8 @@ function DashboardTab() {
         buCount: levelBUs.length,
         objectiveCount: levelObjectives.length,
         kpiCount: levelKPIs.length,
-        avgObjectivesPerBU: levelBUs.length > 0 ? (levelObjectives.length / levelBUs.length).toFixed(1) : 0,
-        avgKPIsPerBU: levelBUs.length > 0 ? (levelKPIs.length / levelBUs.length).toFixed(1) : 0
+        avgObjectivesPerBU: levelBUs.length > 0 ? (levelObjectives.length / levelBUs.length).toFixed(0) : 0,
+        avgKPIsPerBU: levelBUs.length > 0 ? (levelKPIs.length / levelBUs.length).toFixed(0) : 0
       };
     });
   }, [businessUnits, objectives, kpis]);
@@ -122,6 +126,24 @@ function DashboardTab() {
 
   return (
     <div className="dashboard-tab">
+      {/* Company Branding Banner */}
+      {companyInfo?.name && (
+        <div className="company-branding-banner">
+          {companyInfo.logo && (
+            <img
+              src={companyInfo.logo}
+              alt={companyInfo.name}
+              className="company-logo-banner"
+              onError={(e) => e.target.style.display = 'none'}
+            />
+          )}
+          <div className="company-info-banner">
+            <h1 className="company-name-banner">{companyInfo.name}</h1>
+            <p className="company-subtitle-banner">Strategy Cascade & Performance Management</p>
+          </div>
+        </div>
+      )}
+
       <div className="dashboard-header">
         <div>
           <h2>Strategy Dashboard</h2>
@@ -345,7 +367,7 @@ function DashboardTab() {
           <div className="warnings-list">
             {stats.orphanedKPIs > 0 && (
               <div className="warning-item">
-                <span className="warning-icon">⚠️</span>
+                <span className="warning-icon"><AlertTriangle size={16} /></span>
                 <span className="warning-text">
                   {stats.orphanedKPIs} KPI(s) are orphaned (linked to archived objectives)
                 </span>
@@ -353,7 +375,7 @@ function DashboardTab() {
             )}
             {pillarCoverage.filter(p => p.objectiveCount === 0).map(pillar => (
               <div key={pillar.Code} className="warning-item">
-                <span className="warning-icon">⚠️</span>
+                <span className="warning-icon"><AlertTriangle size={16} /></span>
                 <span className="warning-text">
                   Pillar "{pillar.Name}" has no objectives assigned
                 </span>

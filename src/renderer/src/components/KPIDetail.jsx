@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useKPI } from '../contexts/KPIContext';
+import { Check } from 'lucide-react';
 
 function KPIDetail() {
   const { kpiId } = useParams();
@@ -268,7 +269,7 @@ function KPIDetail() {
               onClick={handleKeep}
               disabled={kpi.reviewStatus === 'Retired'}
             >
-              <div className="kpi-action-btn-icon">✓</div>
+              <div className="kpi-action-btn-icon"><Check size={16} /></div>
               <div className="kpi-action-btn-label">Keep</div>
             </button>
 

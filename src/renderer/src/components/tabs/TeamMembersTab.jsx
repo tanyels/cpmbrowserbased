@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { useLicense } from '../../contexts/LicenseContext';
+import { AlertTriangle } from 'lucide-react';
 
 function TeamMembersTab() {
   const {
@@ -22,6 +24,12 @@ function TeamMembersTab() {
     getEmployeeKPIsByEmployee,
     objectives
   } = useStrategy();
+
+  const { isFeatureAllowed, isReadOnly, featureLimits, isInTrial } = useLicense();
+
+  // Check if we can add more team members
+  const canAddMoreMembers = isFeatureAllowed('team_members', teamMembers.length);
+  const memberLimit = featureLimits?.MAX_TEAM_MEMBERS;
 
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -480,10 +488,39 @@ function TeamMembersTab() {
                 setAddingToBU(null);
                 setAddingToManager(null);
               }}
+              disabled={!canAddMoreMembers || isReadOnly()}
             >
               + Add Employee
             </button>
           </div>
+
+          {/* License limit warning */}
+          {isInTrial() && !canAddMoreMembers && (
+            <div className="limit-warning" style={{ margin: '12px' }}>
+              <span className="limit-warning-icon"><AlertTriangle size={14} /></span>
+              <div className="limit-warning-text">
+                <strong>Team Member Limit Reached</strong>
+                <span>Trial is limited to {memberLimit} team members. </span>
+              </div>
+              <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          {/* Read-only warning */}
+          {isReadOnly() && (
+            <div className="limit-warning" style={{ margin: '12px' }}>
+              <span className="limit-warning-icon">🔒</span>
+              <div className="limit-warning-text">
+                <strong>Read-Only Mode</strong>
+                <span>Your license has expired.</span>
+              </div>
+              <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+                Renew
+              </a>
+            </div>
+          )}
 
           {/* Add Employee Form */}
           {showAddForm && (

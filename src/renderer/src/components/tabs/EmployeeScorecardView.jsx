@@ -443,7 +443,7 @@ function EmployeeScorecardView() {
                   className="stat-value achievement-badge"
                   style={getAchievementStyle(overallAchievement)}
                 >
-                  {overallAchievement !== null ? `${overallAchievement.toFixed(1)}%` : '-'}
+                  {overallAchievement !== null ? `${overallAchievement.toFixed(0)}%` : '-'}
                 </span>
                 <span className="stat-label">Overall</span>
               </div>
@@ -475,7 +475,7 @@ function EmployeeScorecardView() {
                           className="achievement-badge"
                           style={getAchievementStyle(objAchievement)}
                         >
-                          {objAchievement !== null ? `${objAchievement.toFixed(1)}%` : '-'}
+                          {objAchievement !== null ? `${objAchievement.toFixed(0)}%` : '-'}
                         </span>
                       </div>
                     </div>
@@ -525,7 +525,7 @@ function EmployeeScorecardView() {
                                       className={`achievement-value ${getAchievementColor(achievement)}`}
                                       style={getAchievementStyle(achievement)}
                                     >
-                                      {achievement !== null ? `${achievement.toFixed(1)}%` : '-'}
+                                      {achievement !== null ? `${achievement.toFixed(0)}%` : '-'}
                                     </span>
                                   </td>
                                 </tr>
@@ -601,7 +601,7 @@ function EmployeeScorecardView() {
                                     className={`achievement-value ${getAchievementColor(achievement)}`}
                                     style={getAchievementStyle(achievement)}
                                   >
-                                    {achievement !== null ? `${achievement.toFixed(1)}%` : '-'}
+                                    {achievement !== null ? `${achievement.toFixed(0)}%` : '-'}
                                   </span>
                                 </td>
                               </tr>
@@ -768,7 +768,7 @@ function MiniLineChart({ data, currentMonth, settings, onMonthSelect }) {
               fill="#fff"
               fontWeight="500"
             >
-              {validPoints[hoveredPoint].month}: {validPoints[hoveredPoint].value?.toFixed(1)}%
+              {validPoints[hoveredPoint].month}: {validPoints[hoveredPoint].value?.toFixed(0)}%
             </text>
           </g>
         )}

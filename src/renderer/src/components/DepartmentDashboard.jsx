@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useKPI } from '../contexts/KPIContext';
+import { BarChart3, FileText, CheckCircle } from 'lucide-react';
 
 function DepartmentDashboard() {
   const navigate = useNavigate();
@@ -96,7 +97,7 @@ function DepartmentDashboard() {
   return (
     <div className="app">
       <header className="header">
-        <h1>📊 CPM KPI Review Tool</h1>
+        <h1><BarChart3 size={24} style={{display:'inline', marginRight: 8}} /> CPM KPI Review Tool</h1>
         <div className="header-actions">
           {hasUnsavedChanges && (
             <div className="unsaved-indicator">
@@ -123,7 +124,7 @@ function DepartmentDashboard() {
       <div className="container">
         {exportSuccess && (
           <div className="success-message">
-            ✓ KPI Library exported successfully!
+            <CheckCircle size={14} /> KPI Library exported successfully!
           </div>
         )}
 
@@ -178,7 +179,7 @@ function DepartmentDashboard() {
 
         {departments.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">📋</div>
+            <div className="empty-state-icon"><FileText size={48} /></div>
             <h3>No departments found</h3>
             <p>Add a department to get started or load an Excel file with KPI data.</p>
             <button
@@ -207,7 +208,7 @@ function DepartmentDashboard() {
                       </span>
                     ) : (
                       <span className={`department-card-badge ${dept.isComplete ? 'complete' : 'pending'}`}>
-                        {dept.isComplete ? '✓ Complete' : 'In Progress'}
+                        {dept.isComplete ? <><CheckCircle size={12} /> Complete</> : 'In Progress'}
                       </span>
                     )}
                   </div>
@@ -238,8 +239,8 @@ function DepartmentDashboard() {
                       {cardsExportStatus[dept.name] === 'exporting'
                         ? 'Generating...'
                         : cardsExportStatus[dept.name] === 'success'
-                        ? '✓ Cards Exported!'
-                        : '📄 Create KPI Cards'}
+                        ? <><CheckCircle size={12} /> Cards Exported!</>
+                        : <><FileText size={12} /> Create KPI Cards</>}
                     </button>
                   )}
                   {cardsExportStatus[dept.name] && cardsExportStatus[dept.name] !== 'exporting' && cardsExportStatus[dept.name] !== 'success' && (

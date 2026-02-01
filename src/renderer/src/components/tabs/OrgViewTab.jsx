@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { Settings, Building2 } from 'lucide-react';
 
 function OrgViewTab() {
   const {
@@ -132,9 +133,9 @@ function OrgViewTab() {
     const totalObjectives = buObjectives.length + operationalObjs.length;
 
     const levelColors = {
-      'L1': '#2563eb',
-      'L2': '#7c3aed',
-      'L3': '#059669'
+      'L1': '#4472C4',
+      'L2': '#5B9BD5',
+      'L3': '#70AD47'
     };
 
     return (
@@ -230,7 +231,7 @@ function OrgViewTab() {
           <div className="org-detail-title">
             <span
               className="org-detail-level"
-              style={{ backgroundColor: selectedOrg.Level === 'L1' ? '#2563eb' : selectedOrg.Level === 'L2' ? '#7c3aed' : '#059669' }}
+              style={{ backgroundColor: selectedOrg.Level === 'L1' ? '#4472C4' : selectedOrg.Level === 'L2' ? '#5B9BD5' : '#70AD47' }}
             >
               {selectedOrg.Level}
             </span>
@@ -353,7 +354,7 @@ function OrgViewTab() {
               <div
                 className="detail-section-header"
                 onClick={() => toggleDetail('objectives')}
-                style={{ borderLeftColor: selectedOrg.Level === 'L2' ? '#7c3aed' : '#059669' }}
+                style={{ borderLeftColor: selectedOrg.Level === 'L2' ? '#5B9BD5' : '#70AD47' }}
               >
                 <div className="section-title">
                   <span className="level-icon">{selectedOrg.Level}</span>
@@ -423,7 +424,7 @@ function OrgViewTab() {
                 onClick={() => toggleDetail('operational')}
               >
                 <div className="section-title">
-                  <span className="operational-icon">⚙️</span>
+                  <span className="operational-icon"><Settings size={12} /></span>
                   <span>Operational</span>
                 </div>
                 <div className="section-meta">
@@ -502,7 +503,7 @@ function OrgViewTab() {
         <div className="org-chart-canvas">
           {orgTree.length === 0 ? (
             <div className="org-chart-empty">
-              <div className="empty-icon">🏢</div>
+              <div className="empty-icon"><Building2 size={48} /></div>
               <h3>No Organizations Defined</h3>
               <p>Go to Design → Business Units to create your organizational structure.</p>
             </div>

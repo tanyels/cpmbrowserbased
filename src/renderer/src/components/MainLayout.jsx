@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useStrategy } from '../contexts/StrategyContext';
+import { useLicense } from '../contexts/LicenseContext';
 import DashboardTab from './tabs/DashboardTab';
 import StrategyMapTab from './tabs/StrategyMapTab';
 import OrgViewTab from './tabs/OrgViewTab';
@@ -25,10 +26,14 @@ function MainLayout() {
     isSaving,
     closeFile
   } = useStrategy();
+  const { getCompanyInfo } = useLicense();
 
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [activeCategory, setActiveCategory] = useState('track'); // 'track', 'design', 'measure', or 'settings'
+  const [activeCategory, setActiveCategory] = useState('design'); // 'design', 'track', 'measure', or 'settings'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Get company info for branding
+  const companyInfo = getCompanyInfo();
 
   // Extract filename from path
   const fileName = filePath ? filePath.split(/[\\/]/).pop() : 'Untitled';
@@ -123,6 +128,18 @@ function MainLayout() {
           <button className="btn btn-ghost btn-sm" onClick={handleClose}>
             ← Back
           </button>
+          {companyInfo?.logo && (
+            <img
+              src={companyInfo.logo}
+              alt={companyInfo.name || 'Company Logo'}
+              className="company-logo-header"
+              onError={(e) => e.target.style.display = 'none'}
+            />
+          )}
+          {companyInfo?.name && (
+            <span className="company-name-header">{companyInfo.name}</span>
+          )}
+          <div className="header-divider"></div>
           <h1 className="file-title">
             {fileName}
             {hasUnsavedChanges && <span className="unsaved-indicator">*</span>}
@@ -152,22 +169,6 @@ function MainLayout() {
 
           <nav className="sidebar-nav">
             <button
-              className={`sidebar-item ${activeCategory === 'track' ? 'active' : ''}`}
-              onClick={() => handleCategoryChange('track')}
-              title="Track"
-            >
-              <span className="sidebar-icon">
-                {/* Chart/Graph icon for Track */}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="20" x2="18" y2="10"></line>
-                  <line x1="12" y1="20" x2="12" y2="4"></line>
-                  <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-              </span>
-              {!sidebarCollapsed && <span className="sidebar-label">Track</span>}
-            </button>
-
-            <button
               className={`sidebar-item ${activeCategory === 'design' ? 'active' : ''}`}
               onClick={() => handleCategoryChange('design')}
               title="Design"
@@ -182,6 +183,22 @@ function MainLayout() {
                 </svg>
               </span>
               {!sidebarCollapsed && <span className="sidebar-label">Design</span>}
+            </button>
+
+            <button
+              className={`sidebar-item ${activeCategory === 'track' ? 'active' : ''}`}
+              onClick={() => handleCategoryChange('track')}
+              title="Track"
+            >
+              <span className="sidebar-icon">
+                {/* Chart/Graph icon for Track */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+              </span>
+              {!sidebarCollapsed && <span className="sidebar-label">Track</span>}
             </button>
 
             <button

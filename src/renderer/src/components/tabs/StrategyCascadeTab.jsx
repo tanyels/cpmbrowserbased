@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { BarChart3 } from 'lucide-react';
 
 function StrategyCascadeTab() {
   const {
@@ -148,7 +149,7 @@ function StrategyCascadeTab() {
                   setSelectedItem({ type: 'kpi', data: kpi });
                 }}
               >
-                <span className="kpi-icon">📊</span>
+                <span className="kpi-icon"><BarChart3 size={12} /></span>
                 <span className="kpi-name">{kpi.Name}</span>
                 <span className={`kpi-status ${getStatusColor(kpi.Approval_Status)}`}>
                   {kpi.Approval_Status || 'Pending'}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { CheckCircle, AlertTriangle } from 'lucide-react';
 
 function ObjectivesTab({ level }) {
   const {
@@ -12,7 +13,16 @@ function ObjectivesTab({ level }) {
     perspectives,
     kpis,
     addKPI,
-    updateKPI
+    updateKPI,
+    buScorecardConfig,
+    setBuParentWeight,
+    removeBuParentWeight,
+    getBuParentWeights,
+    getAvailableParentObjectives,
+    initializeBuScorecardConfig,
+    validateL1Weights,
+    validateL2Weights,
+    validateL3Weights
   } = useStrategy();
 
   const [selectedPillar, setSelectedPillar] = useState(''); // For L1 pillar filter
@@ -54,6 +64,13 @@ function ObjectivesTab({ level }) {
   const impactTypes = ['Direct', 'Indirect', 'Complimentary'];
   const indicatorTypes = ['Lagging', 'Leading'];
   const approvalStatuses = ['Recommended', 'Under Discussion', 'Locked'];
+
+  // Auto-initialize scorecard config for L2/L3 BUs with existing parent objectives
+  useEffect(() => {
+    if (selectedBU && (level === 'L2' || level === 'L3')) {
+      initializeBuScorecardConfig(selectedBU);
+    }
+  }, [selectedBU, level, initializeBuScorecardConfig]);
 
   // Toggle KPI expansion for an objective
   const toggleKPIExpansion = (objCode) => {
@@ -333,6 +350,23 @@ function ObjectivesTab({ level }) {
     return objectives.filter(obj => obj.Level === parentLevel && !obj.Is_Operational);
   }, [objectives, level, selectedBU, businessUnits]);
 
+  // Get the Operational objective for the selected BU (for L2/L3)
+  const operationalObjective = useMemo(() => {
+    if (!selectedBU || level === 'L1') return null;
+    return objectives.find(obj =>
+      obj.Business_Unit_Code === selectedBU &&
+      obj.Level === level &&
+      obj.Is_Operational &&
+      obj.Status === 'Active'
+    );
+  }, [objectives, selectedBU, level]);
+
+  // Get KPIs for the operational objective
+  const operationalKPIs = useMemo(() => {
+    if (!operationalObjective) return [];
+    return kpis.filter(kpi => kpi.Objective_Code === operationalObjective.Code);
+  }, [kpis, operationalObjective]);
+
   // Get KPI count for an objective
   const getKPICount = (objCode) => {
     return kpis.filter(kpi => kpi.Objective_Code === objCode).length;
@@ -524,26 +558,30 @@ function ObjectivesTab({ level }) {
               return data.objectives.length > 0 || code !== '_unassigned';
             })
             .map(([pillarCode, data]) => {
-              const isValid = Math.abs(data.totalWeight - 100) < 0.01;
+              const pillarWeight = parseFloat(data.pillar.Weight) || 0;
+              const isValid = pillarWeight > 0 && Math.abs(data.totalWeight - pillarWeight) < 0.01;
               const isEmpty = data.objectives.length === 0;
+              const remaining = pillarWeight - data.totalWeight;
 
               return (
                 <div key={pillarCode} className="pillar-group">
                   <div className="pillar-group-header">
                     <div className="pillar-group-info">
                       <h3>{data.pillar.Name}</h3>
-                      {data.pillar.Weight > 0 && (
-                        <span className="pillar-weight-badge">Pillar Weight: {data.pillar.Weight}%</span>
+                      {pillarWeight > 0 && (
+                        <span className="pillar-weight-badge">Weight: {pillarWeight}%</span>
                       )}
                     </div>
                     <div className={`weight-indicator ${isValid ? 'valid' : isEmpty ? 'empty' : 'invalid'}`}>
                       {isEmpty ? (
                         <span>No objectives</span>
+                      ) : pillarWeight === 0 ? (
+                        <span className="weight-value">{data.totalWeight.toFixed(0)}% (no weight set)</span>
                       ) : (
                         <>
-                          <span className="weight-value">{data.totalWeight.toFixed(1)}%</span>
+                          <span className="weight-value">{data.totalWeight.toFixed(0)}% / {pillarWeight}%</span>
                           <span className="weight-label">
-                            {isValid ? '✓ Complete' : `${(100 - data.totalWeight).toFixed(1)}% remaining`}
+                            {isValid ? <><CheckCircle size={12} /> Complete</> : `${Math.abs(remaining).toFixed(0)}% ${remaining > 0 ? 'remaining' : 'over'}`}
                           </span>
                         </>
                       )}
@@ -669,6 +707,28 @@ function ObjectivesTab({ level }) {
                                       + Add KPI
                                     </button>
                                   </span>
+                                  {/* KPI Weight Validation */}
+                                  {(() => {
+                                    const objKPIs = getKPIsForObjective(obj.Code);
+                                    const kpiTotalWeight = objKPIs.reduce((sum, k) => sum + (parseFloat(k.Weight) || 0), 0);
+                                    const objWeight = parseFloat(obj.Weight) || 0;
+                                    const kpiIsValid = objWeight > 0 && Math.abs(kpiTotalWeight - objWeight) < 0.01;
+                                    const kpiRemaining = objWeight - kpiTotalWeight;
+
+                                    if (objKPIs.length === 0) return null;
+
+                                    return (
+                                      <span className={`meta-item kpi-weight-status ${kpiIsValid ? 'valid' : 'invalid'}`}>
+                                        {kpiIsValid ? (
+                                          <><CheckCircle size={12} /> KPI weights: {kpiTotalWeight}%</>
+                                        ) : objWeight === 0 ? (
+                                          <>KPI weights: {kpiTotalWeight}% (no weight set)</>
+                                        ) : (
+                                          <><AlertTriangle size={12} /> KPIs: {kpiTotalWeight}% / {objWeight}% ({Math.abs(kpiRemaining).toFixed(0)}% {kpiRemaining > 0 ? 'remaining' : 'over'})</>
+                                        )}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
 
                                 {/* Expanded KPI List */}
@@ -956,13 +1016,16 @@ function ObjectivesTab({ level }) {
   // Render L2 view with BU selection then SO grouping
   if (level === 'L2') {
     const selectedBUObj = businessUnits.find(b => b.Code === selectedBU);
+    const buParentWeights = selectedBU ? getBuParentWeights(selectedBU) : {};
+    const buTotalParentWeight = Object.values(buParentWeights).reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
+    const availableSOs = selectedBU ? getAvailableParentObjectives(selectedBU) : [];
 
     return (
       <div className="objectives-tab">
         <div className="objectives-header">
           <h2>L2 Objectives (Division)</h2>
           <p className="section-description">
-            Select a division first, then define objectives that cascade from L1 Strategic Objectives. Objectives under each SO should total 100%.
+            Select a division, configure which SOs it uses (weights must total 100%), then define objectives under each SO.
           </p>
         </div>
 
@@ -978,17 +1041,6 @@ function ObjectivesTab({ level }) {
               <option key={bu.Code} value={bu.Code}>{bu.Name}</option>
             ))}
           </select>
-          {selectedBU && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setNewObj(prev => ({ ...prev, Business_Unit_Code: selectedBU }));
-                setShowAddForm(true);
-              }}
-            >
-              + Add L2 Objective
-            </button>
-          )}
         </div>
 
         {/* Show message if no BU selected */}
@@ -998,6 +1050,125 @@ function ObjectivesTab({ level }) {
           </div>
         ) : (
           <>
+            {/* SO Scorecard Configuration */}
+            <div className="scorecard-config-section">
+              <h3>Scorecard Configuration for {selectedBUObj?.Name}</h3>
+              <p className="config-description">
+                Assign weights to each Strategic Objective (SO) this division is responsible for. Weights must total 100%.
+              </p>
+
+              <div className={`weight-total-indicator ${Math.abs(buTotalParentWeight - 100) < 0.01 ? 'valid' : 'invalid'}`}>
+                <span>Total SO Weight: {buTotalParentWeight.toFixed(0)}%</span>
+                {Math.abs(buTotalParentWeight - 100) < 0.01 ? (
+                  <span className="status-icon"><CheckCircle size={16} /> Complete</span>
+                ) : (
+                  <span className="status-icon"><AlertTriangle size={16} /> {(100 - buTotalParentWeight).toFixed(0)}% {buTotalParentWeight < 100 ? 'remaining' : 'over'}</span>
+                )}
+              </div>
+
+              {/* Configured SOs + Operational (Operational always shown) */}
+              <div className="configured-parents-list">
+                {/* Strategic SOs */}
+                {Object.entries(buParentWeights)
+                  .filter(([objCode]) => !operationalObjective || objCode !== operationalObjective.Code)
+                  .filter(([objCode]) => l1Objectives.some(o => o.Code === objCode))
+                  .map(([objCode, weight]) => {
+                    const so = l1Objectives.find(o => o.Code === objCode);
+                    const pillar = so ? pillars.find(p => p.Code === so.Pillar_Code) : null;
+
+                    return (
+                      <div key={objCode} className="configured-parent-item">
+                        <div className="parent-info">
+                          <span className="parent-code">{objCode}</span>
+                          <span className="parent-name">{so.Name}</span>
+                          {pillar && <span className="parent-pillar">({pillar.Name})</span>}
+                        </div>
+                        <div className="parent-weight-input">
+                          <input
+                            type="number"
+                            value={weight}
+                            onChange={(e) => setBuParentWeight(selectedBU, objCode, e.target.value)}
+                            min="0"
+                            max="100"
+                            step="1"
+                          />
+                          <span>%</span>
+                        </div>
+                        <button
+                          className="btn btn-xs btn-danger"
+                          onClick={() => removeBuParentWeight(selectedBU, objCode)}
+                          title="Remove from scorecard"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                {/* Operational - ALWAYS shown */}
+                {operationalObjective && (
+                  <div className="configured-parent-item operational-item">
+                    <div className="parent-info">
+                      <span className="parent-code">OPERATIONAL</span>
+                      <span className="parent-name">Operational</span>
+                      <span className="parent-pillar operational-tag">(Non-Strategic KPIs)</span>
+                    </div>
+                    <div className="parent-weight-input">
+                      <input
+                        type="number"
+                        value={buParentWeights[operationalObjective.Code] || 0}
+                        onChange={(e) => setBuParentWeight(selectedBU, operationalObjective.Code, e.target.value)}
+                        min="0"
+                        max="100"
+                        step="1"
+                      />
+                      <span>%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Add SO to scorecard */}
+              {availableSOs.length > 0 && (
+                <div className="add-parent-form">
+                  <select
+                    id="add-so-select"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setBuParentWeight(selectedBU, e.target.value, 0);
+                        e.target.value = '';
+                      }
+                    }}
+                  >
+                    <option value="">+ Add SO to scorecard...</option>
+                    {availableSOs.map(so => {
+                      const pillar = pillars.find(p => p.Code === so.Pillar_Code);
+                      return (
+                        <option key={so.Code} value={so.Code}>
+                          {so.Name} {pillar ? `(${pillar.Name})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Add Objective Button */}
+            {Object.keys(buParentWeights).length > 0 && (
+              <div className="objectives-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setNewObj(prev => ({ ...prev, Business_Unit_Code: selectedBU }));
+                    setShowAddForm(true);
+                  }}
+                >
+                  + Add L2 Objective
+                </button>
+              </div>
+            )}
             {/* Add Objective Form */}
             {showAddForm && (
               <div className="add-objective-form">
@@ -1073,46 +1244,69 @@ function ObjectivesTab({ level }) {
             )}
 
             {/* Objectives grouped by Parent SO */}
-            {objectivesByParentSO && Object.keys(objectivesByParentSO).filter(code =>
-              objectivesByParentSO[code].objectives.length > 0 || code !== '_unassigned'
-            ).length === 0 ? (
+            {Object.keys(buParentWeights).filter(code => !operationalObjective || code !== operationalObjective.Code).filter(code => l1Objectives.some(o => o.Code === code)).length === 0 ? (
               <div className="empty-state">
-                <p>No objectives for this division yet. Click "+ Add L2 Objective" to create one.</p>
+                <p>Add Strategic Objectives to this division's scorecard above, then create L2 objectives under each SO.</p>
               </div>
             ) : (
               <div className="pillar-objectives-container">
-                {objectivesByParentSO && Object.entries(objectivesByParentSO)
-                  .filter(([code, data]) => data.objectives.length > 0 || code !== '_unassigned')
-                  .map(([soCode, data]) => {
-                    const isValid = Math.abs(data.totalWeight - 100) < 0.01;
-                    const isEmpty = data.objectives.length === 0;
+                {Object.entries(buParentWeights)
+                  .filter(([soCode]) => !operationalObjective || soCode !== operationalObjective.Code)
+                  .filter(([soCode]) => l1Objectives.some(o => o.Code === soCode))
+                  .map(([soCode, soBudget]) => {
+                  const soData = objectivesByParentSO?.[soCode];
+                  const so = l1Objectives.find(o => o.Code === soCode);
+                  const pillar = so ? pillars.find(p => p.Code === so.Pillar_Code) : null;
+                  const objectives_list = soData?.objectives || [];
+                  const totalWeight = objectives_list.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
+                  const budgetNum = parseFloat(soBudget) || 0;
+                  const isValid = budgetNum > 0 && Math.abs(totalWeight - budgetNum) < 0.01;
+                  const isEmpty = objectives_list.length === 0;
+                  const remaining = budgetNum - totalWeight;
 
                     return (
                       <div key={soCode} className="pillar-group so-group">
                         <div className="pillar-group-header so-header">
                           <div className="pillar-group-info">
-                            <span className="pillar-code">{data.parentObjective.Code}</span>
-                            <h3>{data.parentObjective.Name}</h3>
-                            {data.pillar && (
-                              <span className="pillar-weight-badge">Pillar: {data.pillar.Name}</span>
+                            <span className="pillar-code">{soCode}</span>
+                            <h3>{so.Name}</h3>
+                            {pillar && (
+                              <span className="pillar-weight-badge">Pillar: {pillar.Name}</span>
                             )}
+                            <span className="pillar-weight-badge">Weight: {budgetNum}%</span>
                           </div>
                           <div className={`weight-indicator ${isValid ? 'valid' : isEmpty ? 'empty' : 'invalid'}`}>
                             {isEmpty ? (
                               <span>No objectives</span>
+                            ) : budgetNum === 0 ? (
+                              <span className="weight-value">{totalWeight.toFixed(0)}% (no weight set)</span>
                             ) : (
                               <>
-                                <span className="weight-value">{data.totalWeight.toFixed(1)}%</span>
+                                <span className="weight-value">{totalWeight.toFixed(0)}% / {budgetNum}%</span>
                                 <span className="weight-label">
-                                  {isValid ? '✓ Complete' : `${(100 - data.totalWeight).toFixed(1)}% remaining`}
+                                  {isValid ? <><CheckCircle size={12} /> Complete</> : `${Math.abs(remaining).toFixed(0)}% ${remaining > 0 ? 'remaining' : 'over'}`}
                                 </span>
                               </>
                             )}
                           </div>
                         </div>
 
+                        {isEmpty ? (
+                          <div className="pillar-empty-state">
+                            <p>No objectives under this SO yet.</p>
+                            <button
+                              className="btn btn-sm btn-outline"
+                              onClick={() => {
+                                setNewObj(prev => ({ ...prev, Parent_Objective_Code: soCode, Business_Unit_Code: selectedBU }));
+                                setShowAddForm(true);
+                              }}
+                            >
+                              + Add Objective
+                            </button>
+                          </div>
+                        ) : (
                         <div className="pillar-objectives-list">
-                          {data.objectives.map(obj => {
+                          {objectives_list.map(obj => {
                             const perspective = perspectives.find(p => p.Code === obj.Perspective_Code);
                             const kpiCount = getKPICount(obj.Code);
                             const isEditing = editingObj === obj.Code;
@@ -1491,11 +1685,237 @@ function ObjectivesTab({ level }) {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     );
                   })}
               </div>
             )}
+
+            {/* Operational Section - Always shown for L2 */}
+            {operationalObjective && (() => {
+              const opBudget = parseFloat(buParentWeights[operationalObjective.Code]) || 0;
+              const opTotalWeight = operationalKPIs.reduce((sum, k) => sum + (parseFloat(k.Weight) || 0), 0);
+              const opIsValid = opBudget > 0 && Math.abs(opTotalWeight - opBudget) < 0.01;
+              const opRemaining = opBudget - opTotalWeight;
+              const opIsEmpty = operationalKPIs.length === 0;
+
+              return (
+                <div className="pillar-group so-group operational-group">
+                  <div className="pillar-group-header so-header">
+                    <div className="pillar-group-info">
+                      <span className="pillar-code">OPERATIONAL</span>
+                      <h3>Operational</h3>
+                      <span className="pillar-weight-badge">Weight: {opBudget}%</span>
+                    </div>
+                    <div className={`weight-indicator ${opIsValid ? 'valid' : opIsEmpty ? 'empty' : 'invalid'}`}>
+                      {opIsEmpty ? (
+                        <span>No KPIs</span>
+                      ) : opBudget === 0 ? (
+                        <span className="weight-value">{opTotalWeight.toFixed(0)}% (no weight set)</span>
+                      ) : (
+                        <>
+                          <span className="weight-value">{opTotalWeight.toFixed(0)}% / {opBudget}%</span>
+                          <span className="weight-label">
+                            {opIsValid ? <><CheckCircle size={12} /> Complete</> : `${Math.abs(opRemaining).toFixed(0)}% ${opRemaining > 0 ? 'remaining' : 'over'}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pillar-objectives-list">
+
+                    {operationalKPIs.length > 0 && (
+                      <div className="kpi-list-expanded">
+                        <table className="kpi-table">
+                          <thead>
+                            <tr>
+                              <th>KPI Name</th>
+                              <th>Weight</th>
+                              <th>Target</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {operationalKPIs.map(kpi => (
+                              <tr key={kpi.Code}>
+                                <td>{kpi.Name}</td>
+                                <td>{kpi.Weight || 0}%</td>
+                                <td>{kpi.Target || '-'}</td>
+                                <td>
+                                  <span className={`status-badge ${(kpi.Approval_Status || 'Recommended').toLowerCase().replace(' ', '-')}`}>
+                                    {kpi.Approval_Status || 'Recommended'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-xs btn-ghost"
+                                    onClick={() => startEditingKPI(kpi)}
+                                  >
+                                    Edit
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+
+                        {/* Inline KPI Edit Form for Operational */}
+                        {editingKPICode && operationalKPIs.some(k => k.Code === editingKPICode) && (
+                          <div className="inline-kpi-edit-form">
+                            <h5>Edit KPI: {editingKPIData?.Name}</h5>
+                            <div className="form-grid">
+                              <div className="form-group">
+                                <label>Name (English) *</label>
+                                <input
+                                  type="text"
+                                  value={editingKPIData?.Name || ''}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Name: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Name (Arabic)</label>
+                                <input
+                                  type="text"
+                                  value={editingKPIData?.Name_AR || ''}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Name_AR: e.target.value })}
+                                  dir="rtl"
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Unit</label>
+                                <input
+                                  type="text"
+                                  value={editingKPIData?.Unit || ''}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Unit: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Target</label>
+                                <input
+                                  type="text"
+                                  value={editingKPIData?.Target || ''}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Target: e.target.value })}
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Weight (%)</label>
+                                <input
+                                  type="number"
+                                  value={editingKPIData?.Weight || 0}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Weight: e.target.value })}
+                                  min="0"
+                                  max="100"
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label>Approval Status</label>
+                                <select
+                                  value={editingKPIData?.Approval_Status || 'Recommended'}
+                                  onChange={(e) => setEditingKPIData({ ...editingKPIData, Approval_Status: e.target.value })}
+                                >
+                                  {approvalStatuses.map(status => (
+                                    <option key={status} value={status}>{status}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="form-actions">
+                              <button className="btn btn-primary btn-sm" onClick={saveKPIEdits}>
+                                Save Changes
+                              </button>
+                              <button className="btn btn-ghost btn-sm" onClick={cancelEditingKPI}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      className="btn btn-sm btn-outline"
+                      onClick={() => setAddingKPIForObjective(operationalObjective.Code)}
+                    >
+                      + Add Operational KPI
+                    </button>
+
+                    {/* Inline KPI Add Form for Operational */}
+                    {addingKPIForObjective === operationalObjective.Code && (
+                      <div className="inline-kpi-form">
+                        <h5>Add Operational KPI</h5>
+                        <div className="form-grid">
+                          <div className="form-group">
+                            <label>Name (English) *</label>
+                            <input
+                              type="text"
+                              value={newKPI.Name}
+                              onChange={(e) => setNewKPI({ ...newKPI, Name: e.target.value })}
+                              placeholder="KPI name..."
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Name (Arabic)</label>
+                            <input
+                              type="text"
+                              value={newKPI.Name_AR}
+                              onChange={(e) => setNewKPI({ ...newKPI, Name_AR: e.target.value })}
+                              placeholder="اسم مؤشر..."
+                              dir="rtl"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Unit</label>
+                            <input
+                              type="text"
+                              value={newKPI.Unit}
+                              onChange={(e) => setNewKPI({ ...newKPI, Unit: e.target.value })}
+                              placeholder="%, #, AED..."
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Target</label>
+                            <input
+                              type="text"
+                              value={newKPI.Target}
+                              onChange={(e) => setNewKPI({ ...newKPI, Target: e.target.value })}
+                              placeholder="Target value..."
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Weight (%)</label>
+                            <input
+                              type="number"
+                              value={newKPI.Weight}
+                              onChange={(e) => setNewKPI({ ...newKPI, Weight: e.target.value })}
+                              placeholder="0"
+                              min="0"
+                              max="100"
+                            />
+                          </div>
+                        </div>
+                        <div className="form-actions">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleAddKPIFromObjective(operationalObjective.Code)}
+                          >
+                            Add KPI
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={resetKPIForm}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
@@ -1504,13 +1924,16 @@ function ObjectivesTab({ level }) {
 
   // Render L3 view with BU selection then L2 objective grouping
   const selectedL3BUObj = businessUnits.find(b => b.Code === selectedBU);
+  const l3BuParentWeights = selectedBU ? getBuParentWeights(selectedBU) : {};
+  const l3BuTotalParentWeight = Object.values(l3BuParentWeights).reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
+  const availableL2Objs = selectedBU ? getAvailableParentObjectives(selectedBU) : [];
 
   return (
     <div className="objectives-tab">
       <div className="objectives-header">
         <h2>L3 Objectives (Department)</h2>
         <p className="section-description">
-          Select a division and department, then define objectives that cascade from L2 objectives. Objectives under each L2 objective should total 100%.
+          Select a department, configure which L2 objectives it uses (weights must total 100%), then define objectives under each L2.
         </p>
       </div>
 
@@ -1541,14 +1964,6 @@ function ObjectivesTab({ level }) {
             <option key={bu.Code} value={bu.Code}>{bu.Name}</option>
           ))}
         </select>
-        {selectedBU && (
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowAddForm(true)}
-          >
-            + Add L3 Objective
-          </button>
-        )}
       </div>
 
       {/* Show message if no BU selected */}
@@ -1558,6 +1973,121 @@ function ObjectivesTab({ level }) {
         </div>
       ) : (
         <>
+          {/* L2 Objective Scorecard Configuration */}
+          <div className="scorecard-config-section">
+            <h3>Scorecard Configuration for {selectedL3BUObj?.Name}</h3>
+            <p className="config-description">
+              Assign weights to each L2 Objective this department is responsible for. Weights must total 100%.
+            </p>
+
+            <div className={`weight-total-indicator ${Math.abs(l3BuTotalParentWeight - 100) < 0.01 ? 'valid' : 'invalid'}`}>
+              <span>Total L2 Objective Weight: {l3BuTotalParentWeight.toFixed(0)}%</span>
+              {Math.abs(l3BuTotalParentWeight - 100) < 0.01 ? (
+                <span className="status-icon"><CheckCircle size={16} /> Complete</span>
+              ) : (
+                <span className="status-icon"><AlertTriangle size={16} /> {(100 - l3BuTotalParentWeight).toFixed(0)}% {l3BuTotalParentWeight < 100 ? 'remaining' : 'over'}</span>
+              )}
+            </div>
+
+            {/* Configured L2 Objectives + Operational (Operational always shown) */}
+            <div className="configured-parents-list">
+              {/* Strategic L2 Objectives */}
+              {Object.entries(l3BuParentWeights)
+                .filter(([objCode]) => !operationalObjective || objCode !== operationalObjective.Code)
+                .filter(([objCode]) => l2ObjectivesList.some(o => o.Code === objCode))
+                .map(([objCode, weight]) => {
+                  const l2Obj = l2ObjectivesList.find(o => o.Code === objCode);
+                  const parentSO = l2Obj ? l1Objectives.find(o => o.Code === l2Obj.Parent_Objective_Code) : null;
+
+                  return (
+                    <div key={objCode} className="configured-parent-item">
+                      <div className="parent-info">
+                        <span className="parent-code">{objCode}</span>
+                        <span className="parent-name">{l2Obj.Name}</span>
+                        {parentSO && <span className="parent-pillar">(SO: {parentSO.Name})</span>}
+                      </div>
+                      <div className="parent-weight-input">
+                        <input
+                          type="number"
+                          value={weight}
+                          onChange={(e) => setBuParentWeight(selectedBU, objCode, e.target.value)}
+                          min="0"
+                          max="100"
+                          step="1"
+                        />
+                        <span>%</span>
+                      </div>
+                      <button
+                        className="btn btn-xs btn-danger"
+                        onClick={() => removeBuParentWeight(selectedBU, objCode)}
+                        title="Remove from scorecard"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+
+              {/* Operational - ALWAYS shown */}
+              {operationalObjective && (
+                <div className="configured-parent-item operational-item">
+                  <div className="parent-info">
+                    <span className="parent-code">OPERATIONAL</span>
+                    <span className="parent-name">Operational</span>
+                    <span className="parent-pillar operational-tag">(Non-Strategic KPIs)</span>
+                  </div>
+                  <div className="parent-weight-input">
+                    <input
+                      type="number"
+                      value={l3BuParentWeights[operationalObjective.Code] || 0}
+                      onChange={(e) => setBuParentWeight(selectedBU, operationalObjective.Code, e.target.value)}
+                      min="0"
+                      max="100"
+                      step="1"
+                    />
+                    <span>%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Add L2 Objective to scorecard */}
+            {availableL2Objs.length > 0 && (
+              <div className="add-parent-form">
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setBuParentWeight(selectedBU, e.target.value, 0);
+                      e.target.value = '';
+                    }
+                  }}
+                >
+                  <option value="">+ Add L2 Objective to scorecard...</option>
+                  {availableL2Objs.map(obj => {
+                    const parentSO = l1Objectives.find(o => o.Code === obj.Parent_Objective_Code);
+                    return (
+                      <option key={obj.Code} value={obj.Code}>
+                        {obj.Name} {parentSO ? `(SO: ${parentSO.Name})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Add Objective Button */}
+          {Object.keys(l3BuParentWeights).length > 0 && (
+            <div className="objectives-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowAddForm(true)}
+              >
+                + Add L3 Objective
+              </button>
+            </div>
+          )}
           {/* Add Objective Form */}
           {showAddForm && (
             <div className="add-objective-form">
@@ -1633,46 +2163,69 @@ function ObjectivesTab({ level }) {
           )}
 
           {/* Objectives grouped by Parent L2 Objective */}
-          {objectivesByParentL2 && Object.keys(objectivesByParentL2).filter(code =>
-            objectivesByParentL2[code].objectives.length > 0 || code !== '_unassigned'
-          ).length === 0 ? (
+          {Object.keys(l3BuParentWeights).filter(code => !operationalObjective || code !== operationalObjective.Code).filter(code => l2ObjectivesList.some(o => o.Code === code)).length === 0 ? (
             <div className="empty-state">
-              <p>No objectives for this department yet. Click "+ Add L3 Objective" to create one.</p>
+              <p>Add L2 Objectives to this department's scorecard above, then create L3 objectives under each L2 Objective.</p>
             </div>
           ) : (
             <div className="pillar-objectives-container">
-              {objectivesByParentL2 && Object.entries(objectivesByParentL2)
-                .filter(([code, data]) => data.objectives.length > 0 || code !== '_unassigned')
-                .map(([l2Code, data]) => {
-                  const isValid = Math.abs(data.totalWeight - 100) < 0.01;
-                  const isEmpty = data.objectives.length === 0;
+              {Object.entries(l3BuParentWeights)
+                  .filter(([l2ObjCode]) => !operationalObjective || l2ObjCode !== operationalObjective.Code)
+                  .filter(([l2ObjCode]) => l2ObjectivesList.some(o => o.Code === l2ObjCode))
+                  .map(([l2ObjCode, l2Budget]) => {
+                  const l2Data = objectivesByParentL2?.[l2ObjCode];
+                  const l2Obj = l2ObjectivesList.find(o => o.Code === l2ObjCode);
+                  const parentSO = l2Obj ? l1Objectives.find(o => o.Code === l2Obj.Parent_Objective_Code) : null;
+                  const l3_objectives_list = l2Data?.objectives || [];
+                  const totalWeight = l3_objectives_list.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
+                  const budgetNum = parseFloat(l2Budget) || 0;
+                  const isValid = budgetNum > 0 && Math.abs(totalWeight - budgetNum) < 0.01;
+                  const isEmpty = l3_objectives_list.length === 0;
+                  const remaining = budgetNum - totalWeight;
 
                   return (
-                    <div key={l2Code} className="pillar-group l3-group">
+                    <div key={l2ObjCode} className="pillar-group l3-group">
                       <div className="pillar-group-header l3-header">
                         <div className="pillar-group-info">
-                          <span className="pillar-code">{data.parentObjective.Code}</span>
-                          <h3>{data.parentObjective.Name}</h3>
-                          {data.l1Parent && (
-                            <span className="pillar-weight-badge">L1: {data.l1Parent.Name}</span>
+                          <span className="pillar-code">{l2ObjCode}</span>
+                          <h3>{l2Obj.Name}</h3>
+                          {parentSO && (
+                            <span className="pillar-weight-badge">SO: {parentSO.Name}</span>
                           )}
+                          <span className="pillar-weight-badge">Weight: {budgetNum}%</span>
                         </div>
                         <div className={`weight-indicator ${isValid ? 'valid' : isEmpty ? 'empty' : 'invalid'}`}>
                           {isEmpty ? (
                             <span>No objectives</span>
+                          ) : budgetNum === 0 ? (
+                            <span className="weight-value">{totalWeight.toFixed(0)}% (no weight set)</span>
                           ) : (
                             <>
-                              <span className="weight-value">{data.totalWeight.toFixed(1)}%</span>
+                              <span className="weight-value">{totalWeight.toFixed(0)}% / {budgetNum}%</span>
                               <span className="weight-label">
-                                {isValid ? '✓ Complete' : `${(100 - data.totalWeight).toFixed(1)}% remaining`}
+                                {isValid ? <><CheckCircle size={12} /> Complete</> : `${Math.abs(remaining).toFixed(0)}% ${remaining > 0 ? 'remaining' : 'over'}`}
                               </span>
                             </>
                           )}
                         </div>
                       </div>
 
+                      {isEmpty ? (
+                        <div className="pillar-empty-state">
+                          <p>No objectives under this L2 Objective yet.</p>
+                          <button
+                            className="btn btn-sm btn-outline"
+                            onClick={() => {
+                              setNewObj(prev => ({ ...prev, Parent_Objective_Code: l2ObjCode, Business_Unit_Code: selectedBU }));
+                              setShowAddForm(true);
+                            }}
+                          >
+                            + Add Objective
+                          </button>
+                        </div>
+                      ) : (
                       <div className="pillar-objectives-list">
-                        {data.objectives.map(obj => {
+                        {l3_objectives_list.map(obj => {
                           const perspective = perspectives.find(p => p.Code === obj.Perspective_Code);
                           const kpiCount = getKPICount(obj.Code);
                           const isEditing = editingObj === obj.Code;
@@ -2051,11 +2604,236 @@ function ObjectivesTab({ level }) {
                           );
                         })}
                       </div>
+                      )}
                     </div>
                   );
                 })}
             </div>
           )}
+
+          {/* Operational Section - Always shown for L3 */}
+          {operationalObjective && (() => {
+            const opBudget = parseFloat(l3BuParentWeights[operationalObjective.Code]) || 0;
+            const opTotalWeight = operationalKPIs.reduce((sum, k) => sum + (parseFloat(k.Weight) || 0), 0);
+            const opIsValid = opBudget > 0 && Math.abs(opTotalWeight - opBudget) < 0.01;
+            const opRemaining = opBudget - opTotalWeight;
+            const opIsEmpty = operationalKPIs.length === 0;
+
+            return (
+              <div className="pillar-group l3-group operational-group">
+                <div className="pillar-group-header l3-header">
+                  <div className="pillar-group-info">
+                    <span className="pillar-code">OPERATIONAL</span>
+                    <h3>Operational</h3>
+                    <span className="pillar-weight-badge">Weight: {opBudget}%</span>
+                  </div>
+                  <div className={`weight-indicator ${opIsValid ? 'valid' : opIsEmpty ? 'empty' : 'invalid'}`}>
+                    {opIsEmpty ? (
+                      <span>No KPIs</span>
+                    ) : opBudget === 0 ? (
+                      <span className="weight-value">{opTotalWeight.toFixed(0)}% (no weight set)</span>
+                    ) : (
+                      <>
+                        <span className="weight-value">{opTotalWeight.toFixed(0)}% / {opBudget}%</span>
+                        <span className="weight-label">
+                          {opIsValid ? <><CheckCircle size={12} /> Complete</> : `${Math.abs(opRemaining).toFixed(0)}% ${opRemaining > 0 ? 'remaining' : 'over'}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pillar-objectives-list">
+                  {operationalKPIs.length > 0 && (
+                    <div className="kpi-list-expanded">
+                      <table className="kpi-table">
+                        <thead>
+                          <tr>
+                            <th>KPI Name</th>
+                            <th>Weight</th>
+                            <th>Target</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {operationalKPIs.map(kpi => (
+                            <tr key={kpi.Code}>
+                              <td>{kpi.Name}</td>
+                              <td>{kpi.Weight || 0}%</td>
+                              <td>{kpi.Target || '-'}</td>
+                              <td>
+                                <span className={`status-badge ${(kpi.Approval_Status || 'Recommended').toLowerCase().replace(' ', '-')}`}>
+                                  {kpi.Approval_Status || 'Recommended'}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  className="btn btn-xs btn-ghost"
+                                  onClick={() => startEditingKPI(kpi)}
+                                >
+                                  Edit
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      {/* Inline KPI Edit Form for Operational */}
+                      {editingKPICode && operationalKPIs.some(k => k.Code === editingKPICode) && (
+                        <div className="inline-kpi-edit-form">
+                          <h5>Edit KPI: {editingKPIData?.Name}</h5>
+                          <div className="form-grid">
+                            <div className="form-group">
+                              <label>Name (English) *</label>
+                              <input
+                                type="text"
+                                value={editingKPIData?.Name || ''}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Name: e.target.value })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Name (Arabic)</label>
+                              <input
+                                type="text"
+                                value={editingKPIData?.Name_AR || ''}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Name_AR: e.target.value })}
+                                dir="rtl"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Unit</label>
+                              <input
+                                type="text"
+                                value={editingKPIData?.Unit || ''}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Unit: e.target.value })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Target</label>
+                              <input
+                                type="text"
+                                value={editingKPIData?.Target || ''}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Target: e.target.value })}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Weight (%)</label>
+                              <input
+                                type="number"
+                                value={editingKPIData?.Weight || 0}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Weight: e.target.value })}
+                                min="0"
+                                max="100"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label>Approval Status</label>
+                              <select
+                                value={editingKPIData?.Approval_Status || 'Recommended'}
+                                onChange={(e) => setEditingKPIData({ ...editingKPIData, Approval_Status: e.target.value })}
+                              >
+                                {approvalStatuses.map(status => (
+                                  <option key={status} value={status}>{status}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="form-actions">
+                            <button className="btn btn-primary btn-sm" onClick={saveKPIEdits}>
+                              Save Changes
+                            </button>
+                            <button className="btn btn-ghost btn-sm" onClick={cancelEditingKPI}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-sm btn-outline"
+                    onClick={() => setAddingKPIForObjective(operationalObjective.Code)}
+                  >
+                    + Add Operational KPI
+                  </button>
+
+                  {/* Inline KPI Add Form for Operational */}
+                  {addingKPIForObjective === operationalObjective.Code && (
+                    <div className="inline-kpi-form">
+                      <h5>Add Operational KPI</h5>
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Name (English) *</label>
+                          <input
+                            type="text"
+                            value={newKPI.Name}
+                            onChange={(e) => setNewKPI({ ...newKPI, Name: e.target.value })}
+                            placeholder="KPI name..."
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Name (Arabic)</label>
+                          <input
+                            type="text"
+                            value={newKPI.Name_AR}
+                            onChange={(e) => setNewKPI({ ...newKPI, Name_AR: e.target.value })}
+                            placeholder="اسم مؤشر..."
+                            dir="rtl"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Unit</label>
+                          <input
+                            type="text"
+                            value={newKPI.Unit}
+                            onChange={(e) => setNewKPI({ ...newKPI, Unit: e.target.value })}
+                            placeholder="%, #, AED..."
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Target</label>
+                          <input
+                            type="text"
+                            value={newKPI.Target}
+                            onChange={(e) => setNewKPI({ ...newKPI, Target: e.target.value })}
+                            placeholder="Target value..."
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Weight (%)</label>
+                          <input
+                            type="number"
+                            value={newKPI.Weight}
+                            onChange={(e) => setNewKPI({ ...newKPI, Weight: e.target.value })}
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                          />
+                        </div>
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleAddKPIFromObjective(operationalObjective.Code)}
+                        >
+                          Add KPI
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={resetKPIForm}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { useLicense } from '../../contexts/LicenseContext';
+import { AlertTriangle, Building2, Building, Home } from 'lucide-react';
 
 function BusinessUnitsTab() {
   const {
@@ -9,6 +11,12 @@ function BusinessUnitsTab() {
     deleteBusinessUnit,
     objectives
   } = useStrategy();
+
+  const { isFeatureAllowed, isReadOnly, featureLimits, isInTrial } = useLicense();
+
+  // Check if we can add more business units
+  const canAddMoreBUs = isFeatureAllowed('business_units', businessUnits.length);
+  const buLimit = featureLimits?.MAX_BUSINESS_UNITS;
 
   const [selectedBU, setSelectedBU] = useState(null);
   const [editingBU, setEditingBU] = useState(null);
@@ -101,9 +109,9 @@ function BusinessUnitsTab() {
           onClick={() => setSelectedBU(bu.Code)}
         >
           <div className="bu-node-icon">
-            {bu.Level === 'L1' && '🏢'}
-            {bu.Level === 'L2' && '🏬'}
-            {bu.Level === 'L3' && '🏠'}
+            {bu.Level === 'L1' && <Building2 size={16} />}
+            {bu.Level === 'L2' && <Building size={16} />}
+            {bu.Level === 'L3' && <Home size={16} />}
           </div>
           {isEditing ? (
             <div className="bu-edit-inline">
@@ -246,6 +254,34 @@ function BusinessUnitsTab() {
           )}
         </div>
 
+        {/* License limit warning */}
+        {isInTrial() && !canAddMoreBUs && (
+          <div className="limit-warning">
+            <span className="limit-warning-icon"><AlertTriangle size={14} /></span>
+            <div className="limit-warning-text">
+              <strong>Business Unit Limit Reached</strong>
+              <span>Trial is limited to {buLimit} business units. </span>
+            </div>
+            <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+              Upgrade License
+            </a>
+          </div>
+        )}
+
+        {/* Read-only warning */}
+        {isReadOnly() && (
+          <div className="limit-warning">
+            <span className="limit-warning-icon">🔒</span>
+            <div className="limit-warning-text">
+              <strong>Read-Only Mode</strong>
+              <span>Your license has expired. You cannot make changes.</span>
+            </div>
+            <a href="http://localhost:3000/products/cpm-software" target="_blank" rel="noopener noreferrer">
+              Renew License
+            </a>
+          </div>
+        )}
+
         {/* Add L1 form */}
         <div className="add-l1-section">
           {showAddForm && addingToParent === null ? (
@@ -273,7 +309,7 @@ function BusinessUnitsTab() {
                   placeholder="اسم الوحدة (Arabic)"
                   dir="rtl"
                 />
-                <button className="btn btn-primary" onClick={() => handleAddBU('L1', '')}>
+                <button className="btn btn-primary" onClick={() => handleAddBU('L1', '')} disabled={!canAddMoreBUs || isReadOnly()}>
                   Add L1 Unit
                 </button>
                 <button
@@ -288,6 +324,7 @@ function BusinessUnitsTab() {
             <button
               className="btn btn-secondary"
               onClick={() => { setShowAddForm(true); setAddingToParent(null); }}
+              disabled={!canAddMoreBUs || isReadOnly()}
             >
               + Add L1 (Corporate) Unit
             </button>

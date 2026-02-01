@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
+import { BarChart3 } from 'lucide-react';
 
 // ============================================
 // SCORECARD TAB - Main Component
@@ -432,7 +433,7 @@ function ScorecardTab() {
 
       {!selectedBU ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📊</div>
+          <div className="empty-state-icon"><BarChart3 size={48} /></div>
           <h3>Select a Business Unit</h3>
           <p>Choose a business unit from the filters above to view its scorecard.</p>
         </div>
@@ -481,7 +482,7 @@ function ScorecardTab() {
             </div>
           </div>
 
-          {/* KPI Table */}
+          {/* KPI Table - Full table */}
           <div className="scorecard-table-container">
             <h4>KPI Details</h4>
             {currentKPIs.length === 0 ? (
@@ -491,9 +492,8 @@ function ScorecardTab() {
                 <thead>
                   <tr>
                     <th>KPI Name</th>
-                    <th>Status</th>
-                    <th>Perspective</th>
                     <th>Objective</th>
+                    <th>Status</th>
                     <th>Weight</th>
                     <th>Target</th>
                     <th>Actual</th>
@@ -502,11 +502,11 @@ function ScorecardTab() {
                 </thead>
                 <tbody>
                   {currentKPIs.map(kpi => {
-                    const objective = (objectives || []).find(o => o.Code === kpi.Objective_Code);
                     const target = getKPITarget(kpi, selectedMonth);
                     const actual = getKPIActual(kpi.Code, selectedMonth);
                     const achievement = getKPIAchievement(kpi.Code, selectedMonth);
                     const cappedAchievement = getCappedAchievement(achievement);
+                    const objective = (objectives || []).find(o => o.Code === kpi.Objective_Code);
 
                     return (
                       <tr key={kpi.Code} onClick={() => openKPIModal(kpi)} className="clickable-row">
@@ -514,16 +514,15 @@ function ScorecardTab() {
                           <div className="kpi-name">{kpi.Name}</div>
                           <div className="kpi-code">{kpi.Code}</div>
                         </td>
+                        <td className="objective-cell">{objective?.Name || '—'}</td>
                         <td className="status-cell">
                           <span className={`approval-badge ${(kpi.Approval_Status || '').toLowerCase().replace(/\s+/g, '-')}`}>
                             {kpi.Approval_Status || '—'}
                           </span>
                         </td>
-                        <td>{objective?.Perspective || '—'}</td>
-                        <td>{objective?.Name || '—'}</td>
                         <td className="weight-cell">{kpi.Weight ? `${kpi.Weight}%` : '—'}</td>
                         <td className="target-cell">{target !== null ? target : '—'}</td>
-                        <td className="actual-cell">{actual !== null ? actual.toFixed(1) : '—'}</td>
+                        <td className="actual-cell">{actual !== null ? actual.toFixed(0) : '—'}</td>
                         <td className={`achievement-cell ${getAchievementColor(cappedAchievement)}`}>
                           {cappedAchievement !== null ? `${cappedAchievement.toFixed(0)}%` : '—'}
                         </td>
@@ -788,7 +787,7 @@ function ScorecardTab() {
                       )}
                       <div className="detail-item">
                         <label>Actual ({months[selectedMonth]?.short})</label>
-                        <span>{getKPIActual(selectedKPI.Code, selectedMonth)?.toFixed(1) || '—'} {selectedKPI.Unit || ''}</span>
+                        <span>{getKPIActual(selectedKPI.Code, selectedMonth)?.toFixed(0) || '—'} {selectedKPI.Unit || ''}</span>
                       </div>
                       <div className="detail-item">
                         <label>Polarity</label>

@@ -107,7 +107,7 @@ function StrategyTab() {
         <h2>
           Strategic Pillars
           <span className={`weight-total ${Math.abs(totalWeight - 100) < 0.01 ? 'valid' : 'invalid'}`}>
-            Total Weight: {totalWeight.toFixed(1)}%
+            Total Weight: {totalWeight.toFixed(0)}%
           </span>
         </h2>
 

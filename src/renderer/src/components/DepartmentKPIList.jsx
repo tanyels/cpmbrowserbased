@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useKPI } from '../contexts/KPIContext';
+import { CheckCircle } from 'lucide-react';
 
 function DepartmentKPIList() {
   const { departmentName } = useParams();
@@ -222,7 +223,7 @@ function DepartmentKPIList() {
                     </td>
                     <td>
                       <span className={`status-badge ${getReviewBadgeClass(kpi.reviewStatus)}`}>
-                        {kpi.reviewStatus === 'Pending' ? 'Pending' : `✓ ${kpi.reviewStatus}`}
+                        {kpi.reviewStatus === 'Pending' ? 'Pending' : <><CheckCircle size={12} /> {kpi.reviewStatus}</>}
                       </span>
                     </td>
                   </tr>

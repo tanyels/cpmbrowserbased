@@ -1,7 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const Store = require('electron-store');
 const ExcelJS = require('exceljs');
+const { licenseService, LICENSE_STATE, LICENSE_CONFIG } = require('./licenseService');
 
 const store = new Store();
 
@@ -341,6 +343,7 @@ ipcMain.handle('read-strategy-file', async (event, filePath) => {
         Name_AR: kpi.Name_AR || kpi['KPI Name (Arabic)'] || '',
         Description: kpi.Description || kpi['KPI Description (English)'] || '',
         Description_AR: kpi.Description_AR || '',
+        Level: kpi.Level || '',  // Level is derived from objective, but can be stored directly
         Objective_Code: kpi.Objective_Code || '',
         Business_Unit_Code: kpi.Business_Unit || kpi.Business_Unit_Code || '',
         Impact_Type: kpi.Impact_Type || 'Direct',
@@ -573,6 +576,21 @@ ipcMain.handle('read-strategy-file', async (event, filePath) => {
       });
     }
 
+    // BU Scorecard Config (nested structure: { buCode: { parentObjCode: weight } })
+    const buScorecardConfigSheet = workbook.getWorksheet('BU_Scorecard_Config');
+    data.buScorecardConfig = {};
+    if (buScorecardConfigSheet) {
+      const configData = readSheetData(buScorecardConfigSheet);
+      configData.forEach(row => {
+        if (row.BU_Code && row.Parent_Objective_Code) {
+          if (!data.buScorecardConfig[row.BU_Code]) {
+            data.buScorecardConfig[row.BU_Code] = {};
+          }
+          data.buScorecardConfig[row.BU_Code][row.Parent_Objective_Code] = parseFloat(row.Weight) || 0;
+        }
+      });
+    }
+
     // Ensure Operational objectives exist for all Business Units
     const existingOperational = data.objectives.filter(o => o.Is_Operational);
     const operationalBUs = new Set(existingOperational.map(o => `${o.Level}_${o.Business_Unit_Code}`));
@@ -690,13 +708,18 @@ ipcMain.handle('save-strategy-file', async (event, { filePath, data }) => {
     ]);
 
     // KPIs sheet - map frontend field names to Excel column names
-    const kpisForExcel = (data.kpis || []).map(kpi => ({
-      ...kpi,
-      Business_Unit: kpi.Business_Unit_Code || kpi.Business_Unit || '',
-      Monthly_Targets: JSON.stringify(kpi.Monthly_Targets || {})
-    }));
+    // Derive Level from the linked objective
+    const kpisForExcel = (data.kpis || []).map(kpi => {
+      const objective = (data.objectives || []).find(obj => obj.Code === kpi.Objective_Code);
+      return {
+        ...kpi,
+        Level: objective?.Level || kpi.Level || '',
+        Business_Unit: kpi.Business_Unit_Code || kpi.Business_Unit || '',
+        Monthly_Targets: JSON.stringify(kpi.Monthly_Targets || {})
+      };
+    });
     createSheet('KPIs', kpisForExcel, [
-      'Code', 'Name', 'Name_AR', 'Description', 'Description_AR', 'Objective_Code', 'Business_Unit',
+      'Code', 'Name', 'Name_AR', 'Description', 'Description_AR', 'Level', 'Objective_Code', 'Business_Unit',
       'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Target_Mode', 'Monthly_Targets', 'Unit', 'Weight', 'Status', 'Review_Status', 'Discussion', 'Polarity'
     ]);
 
@@ -825,6 +848,20 @@ ipcMain.handle('save-strategy-file', async (event, { filePath, data }) => {
     }));
     createSheet('Settings', settingsData, ['Key', 'Value']);
 
+    // BU Scorecard Config sheet (flatten the nested structure)
+    // Format: { buCode: { parentObjCode: weight, ... }, ... }
+    const buScorecardConfigData = [];
+    Object.entries(data.buScorecardConfig || {}).forEach(([buCode, parentWeights]) => {
+      Object.entries(parentWeights || {}).forEach(([parentObjCode, weight]) => {
+        buScorecardConfigData.push({
+          BU_Code: buCode,
+          Parent_Objective_Code: parentObjCode,
+          Weight: weight
+        });
+      });
+    });
+    createSheet('BU_Scorecard_Config', buScorecardConfigData, ['BU_Code', 'Parent_Objective_Code', 'Weight']);
+
     console.log('MAIN SAVE - Writing file to:', filePath);
     await workbook.xlsx.writeFile(filePath);
     console.log('MAIN SAVE - File written successfully');
@@ -877,8 +914,8 @@ ipcMain.handle('create-new-strategy-file', async (event, filePath) => {
     // KPIs
     const kpisSheet = workbook.addWorksheet('KPIs');
     writeSheetData(kpisSheet, [], [
-      'Code', 'Name', 'Name_AR', 'Description', 'Objective_Code', 'Business_Unit',
-      'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Weight', 'Status', 'Review_Status', 'Discussion'
+      'Code', 'Name', 'Name_AR', 'Description', 'Level', 'Objective_Code', 'Business_Unit',
+      'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Weight', 'Status', 'Review_Status', 'Discussion', 'Polarity'
     ]);
 
     // Objective Links
@@ -937,6 +974,10 @@ ipcMain.handle('create-new-strategy-file', async (event, filePath) => {
     // Settings
     const settingsSheet = workbook.addWorksheet('Settings');
     writeSheetData(settingsSheet, [], ['Key', 'Value']);
+
+    // BU Scorecard Config
+    const buScorecardConfigSheet = workbook.addWorksheet('BU_Scorecard_Config');
+    writeSheetData(buScorecardConfigSheet, [], ['BU_Code', 'Parent_Objective_Code', 'Weight']);
 
     await workbook.xlsx.writeFile(filePath);
     return { success: true };
@@ -1126,9 +1167,17 @@ ipcMain.handle('generate-sample-file', async (event, filePath) => {
       { Code: 'KPI_L3_TRN_004', Name: 'Knowledge Assessment Pass Rate', Name_AR: 'معدل اجتياز تقييم المعرفة', Description: 'Percentage passing post-training assessments', Objective_Code: 'OBJ_L3_OPERATIONAL_BU_TRN', Business_Unit: 'BU_TRN', Impact_Type: 'Direct', Indicator_Type: 'Lagging', Approval_Status: 'Recommended', Formula: 'Passed assessments / Total assessments * 100', Data_Points: 'Assessment results', Polarity: 'Positive', Unit: '%', Target: 90, Weight: 20, Status: 'Active', Review_Status: 'Kept', Discussion: '' },
       { Code: 'KPI_L3_TRN_005', Name: 'Training Programs Delivered', Name_AR: 'برامج التدريب المقدمة', Description: 'Number of training programs conducted', Objective_Code: 'OBJ_L3_OPERATIONAL_BU_TRN', Business_Unit: 'BU_TRN', Impact_Type: 'Direct', Indicator_Type: 'Leading', Approval_Status: 'Recommended', Formula: 'Count of programs', Data_Points: 'Training calendar', Polarity: 'Positive', Unit: 'Count', Target: 24, Weight: 20, Status: 'Active', Review_Status: 'Kept', Discussion: '' }
     ];
-    writeSheetData(kpisSheet, kpis, [
-      'Code', 'Name', 'Name_AR', 'Description', 'Objective_Code', 'Business_Unit',
-      'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Weight', 'Status', 'Review_Status', 'Discussion'
+    // Add Level to each KPI based on code pattern (KPI_L1_*, KPI_L2_*, KPI_L3_*)
+    const kpisWithLevel = kpis.map(kpi => {
+      let level = '';
+      if (kpi.Code.includes('_L1_')) level = 'L1';
+      else if (kpi.Code.includes('_L2_')) level = 'L2';
+      else if (kpi.Code.includes('_L3_')) level = 'L3';
+      return { ...kpi, Level: level };
+    });
+    writeSheetData(kpisSheet, kpisWithLevel, [
+      'Code', 'Name', 'Name_AR', 'Description', 'Level', 'Objective_Code', 'Business_Unit',
+      'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Weight', 'Polarity', 'Status', 'Review_Status', 'Discussion'
     ]);
 
     await workbook.xlsx.writeFile(filePath);
@@ -1274,7 +1323,7 @@ ipcMain.handle('export-strategy-report', async (event, { filePath, data }) => {
 
     // Sheet 4: KPIs
     const kpisSheet = workbook.addWorksheet('KPIs');
-    kpisSheet.addRow(['Code', 'Name', 'Name (Arabic)', 'Objective', 'Business Unit', 'Impact Type', 'Indicator Type', 'Approval Status', 'Target', 'Unit', 'Weight', 'Status']);
+    kpisSheet.addRow(['Code', 'Name', 'Name (Arabic)', 'Level', 'Objective', 'Business Unit', 'Impact Type', 'Indicator Type', 'Approval Status', 'Target', 'Unit', 'Weight', 'Polarity', 'Status']);
     kpisSheet.getRow(1).font = { bold: true };
     kpisSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     kpisSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1283,10 +1332,12 @@ ipcMain.handle('export-strategy-report', async (event, { filePath, data }) => {
     sortedKPIs.forEach(kpi => {
       const obj = data.objectives.find(o => o.Code === kpi.Objective_Code);
       const bu = obj ? data.businessUnits.find(b => b.Code === (obj.Business_Unit_Code || obj.Business_Unit)) : null;
+      const level = obj?.Level || kpi.Level || '';
       kpisSheet.addRow([
         kpi.Code,
         kpi.Name,
         kpi.Name_AR || '',
+        level,
         obj ? obj.Name : kpi.Objective_Code || '',
         bu ? bu.Name : (kpi.Business_Unit_Code || kpi.Business_Unit || ''),
         kpi.Impact_Type,
@@ -1295,6 +1346,7 @@ ipcMain.handle('export-strategy-report', async (event, { filePath, data }) => {
         kpi.Target,
         kpi.Unit || '',
         kpi.Weight,
+        kpi.Polarity || 'Positive',
         kpi.Review_Status
       ]);
     });
@@ -1427,6 +1479,141 @@ ipcMain.handle('generate-kpi-cards', async (event, { templatePath, outputPath, k
     return { success: true, count: kpis.length };
   } catch (error) {
     console.error('Error generating KPI cards:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================
+// LICENSE MANAGEMENT HANDLERS
+// ============================================
+
+// Get current license state
+ipcMain.handle('license:get-state', async () => {
+  try {
+    const state = await licenseService.getCurrentState();
+    return { success: true, ...state };
+  } catch (error) {
+    console.error('Error getting license state:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get license data
+ipcMain.handle('license:get-data', () => {
+  try {
+    const data = licenseService.getLicenseData();
+    return { success: true, data };
+  } catch (error) {
+    console.error('Error getting license data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Activate license with key
+ipcMain.handle('license:activate', async (event, licenseKey, companyInfo = null) => {
+  try {
+    const result = await licenseService.activateLicense(licenseKey, companyInfo);
+    return result;
+  } catch (error) {
+    console.error('Error activating license:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Deactivate current license
+ipcMain.handle('license:deactivate', async () => {
+  try {
+    const result = await licenseService.deactivateLicense();
+    return result;
+  } catch (error) {
+    console.error('Error deactivating license:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Start trial mode
+ipcMain.handle('license:start-trial', () => {
+  try {
+    const result = licenseService.startTrial();
+    return result;
+  } catch (error) {
+    console.error('Error starting trial:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get trial status
+ipcMain.handle('license:get-trial-status', () => {
+  try {
+    const status = licenseService.getTrialStatus();
+    return { success: true, ...status };
+  } catch (error) {
+    console.error('Error getting trial status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get feature limits
+ipcMain.handle('license:get-limits', async () => {
+  try {
+    const limits = await licenseService.getFeatureLimits();
+    return { success: true, limits };
+  } catch (error) {
+    console.error('Error getting feature limits:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Validate current license (force online check)
+ipcMain.handle('license:validate', async () => {
+  try {
+    const licenseKey = licenseService.getLicenseData().licenseKey;
+    if (!licenseKey) {
+      return { success: false, message: 'No license key found' };
+    }
+    const result = await licenseService.validateLicense(licenseKey);
+    return result;
+  } catch (error) {
+    console.error('Error validating license:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Clear license data (for testing/debugging)
+ipcMain.handle('license:clear', () => {
+  try {
+    const result = licenseService.clearLicenseData();
+    return result;
+  } catch (error) {
+    console.error('Error clearing license data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get license configuration
+ipcMain.handle('license:get-config', () => {
+  return {
+    trialDays: LICENSE_CONFIG.TRIAL_DAYS,
+    gracePeriodDays: LICENSE_CONFIG.GRACE_PERIOD_DAYS,
+    validationIntervalDays: LICENSE_CONFIG.VALIDATION_INTERVAL_DAYS,
+    trialLimits: LICENSE_CONFIG.TRIAL_LIMITS
+  };
+});
+
+// Get company logo as base64
+ipcMain.handle('license:get-company-logo', () => {
+  try {
+    const licenseData = licenseService.getLicenseData();
+    if (licenseData.companyLogoPath && fs.existsSync(licenseData.companyLogoPath)) {
+      const logoBuffer = fs.readFileSync(licenseData.companyLogoPath);
+      const ext = path.extname(licenseData.companyLogoPath).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+      const base64 = logoBuffer.toString('base64');
+      return { success: true, logo: `data:${mimeType};base64,${base64}` };
+    }
+    return { success: false, error: 'No logo found' };
+  } catch (error) {
+    console.error('Error reading company logo:', error);
     return { success: false, error: error.message };
   }
 });
