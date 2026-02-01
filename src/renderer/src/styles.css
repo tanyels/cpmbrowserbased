@@ -1022,88 +1022,78 @@ body {
   overflow: hidden;
 }
 
-/* Left Sidebar */
-.main-sidebar {
-  width: 180px;
+/* Horizontal Toolbar */
+.main-toolbar {
   background: var(--gray-800);
-  display: flex;
-  flex-direction: column;
-  transition: width 0.2s ease;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   flex-shrink: 0;
 }
 
-.main-sidebar.collapsed {
-  width: 56px;
-}
-
-.sidebar-toggle {
-  background: none;
-  border: none;
-  color: var(--gray-400);
-  padding: 12px;
-  cursor: pointer;
-  font-size: 16px;
-  text-align: right;
-  transition: color 0.2s ease;
-}
-
-.sidebar-toggle:hover {
-  color: var(--white);
-}
-
-.main-sidebar.collapsed .sidebar-toggle {
-  text-align: center;
-}
-
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  gap: 4px;
-  height: 100%;
-}
-
-.sidebar-item {
+.toolbar-nav {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: none;
-  border: none;
-  border-radius: var(--radius);
-  color: var(--gray-400);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  width: 100%;
+  padding: 4px 12px;
+  gap: 2px;
 }
 
-.sidebar-item:hover {
+.toolbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--gray-400);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.toolbar-item:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--white);
 }
 
-.sidebar-item.active {
+.toolbar-item.active {
   background: var(--primary);
   color: var(--white);
 }
 
-.sidebar-icon {
+.toolbar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.sidebar-label {
-  font-size: 14px;
+.toolbar-label {
+  font-size: 13px;
   font-weight: 500;
-  white-space: nowrap;
 }
 
-.main-sidebar.collapsed .sidebar-item {
-  justify-content: center;
-  padding: 12px;
+.toolbar-spacer {
+  flex: 1;
+}
+
+.toolbar-toggle-btn {
+  padding: 6px;
+  opacity: 0.75;
+}
+
+.toolbar-toggle-btn:hover {
+  opacity: 1;
+}
+
+.main-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* Main Content Area */
@@ -10253,3 +10243,399 @@ body {
   margin-top: 16px;
   text-align: center;
 }
+
+/* ===========================
+   Dark Mode
+   =========================== */
+.main-layout.dark-mode {
+  --white: #1e1e2e;
+  --gray-100: #181825;
+  --gray-200: #2a2a3c;
+  --gray-300: #3a3a4e;
+  --gray-400: #5a5a72;
+  --gray-500: #8888a0;
+  --gray-600: #b0b0c8;
+  --gray-700: #cdd6f4;
+  --gray-800: #e0e0f0;
+  --gray-900: #f0f0f8;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --primary: #7289da;
+  --primary-dark: #5b6eae;
+  --primary-light: #8ea1e8;
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode .main-header {
+  background: var(--white);
+  border-bottom-color: var(--gray-200);
+}
+
+.main-layout.dark-mode .main-toolbar {
+  background: #14141f;
+}
+
+.main-layout.dark-mode .toolbar-item {
+  color: var(--gray-500);
+}
+
+.main-layout.dark-mode .toolbar-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode .toolbar-item.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.main-layout.dark-mode .main-nav {
+  background: var(--white);
+  border-bottom-color: var(--gray-200);
+}
+
+.main-layout.dark-mode .nav-tab {
+  color: var(--gray-600);
+}
+
+.main-layout.dark-mode .nav-tab:hover {
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode .nav-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.main-layout.dark-mode .main-content {
+  background: var(--gray-100);
+}
+
+.main-layout.dark-mode input,
+.main-layout.dark-mode select,
+.main-layout.dark-mode textarea {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode input:focus,
+.main-layout.dark-mode select:focus,
+.main-layout.dark-mode textarea:focus {
+  border-color: var(--primary);
+}
+
+.main-layout.dark-mode .btn {
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode .btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.main-layout.dark-mode .btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.main-layout.dark-mode table th {
+  background: var(--gray-200);
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode table td {
+  border-color: var(--gray-200);
+}
+
+.main-layout.dark-mode table tr:hover {
+  background: var(--gray-200);
+}
+
+/* Dark mode: Cards & Panels */
+.main-layout.dark-mode .measure-card,
+.main-layout.dark-mode .global-value-card,
+.main-layout.dark-mode .data-entry-card,
+.main-layout.dark-mode .strategy-section,
+.main-layout.dark-mode .debug-content {
+  background: var(--white);
+  color: var(--gray-900);
+}
+
+/* Dark mode: Modals */
+.main-layout.dark-mode .modal-content {
+  background: var(--white);
+  color: var(--gray-900);
+}
+
+/* Dark mode: Formula builder */
+.main-layout.dark-mode .formula-element .static-input {
+  background: var(--gray-200);
+  color: var(--gray-900);
+  border-color: var(--gray-300);
+}
+
+.main-layout.dark-mode .formula-info .formula-text {
+  background: var(--gray-200);
+  color: var(--gray-900);
+}
+
+.main-layout.dark-mode .palette-item.global-value {
+  background: #064e3b;
+  color: #6ee7b7;
+  border-color: #065f46;
+}
+
+.main-layout.dark-mode .palette-item.global-value:hover {
+  background: #065f46;
+  border-color: #10b981;
+}
+
+.main-layout.dark-mode .palette-item.measure-ref {
+  background: #78350f;
+  color: #fcd34d;
+  border-color: #92400e;
+}
+
+.main-layout.dark-mode .palette-item.measure-ref:hover {
+  background: #92400e;
+  border-color: #f59e0b;
+}
+
+.main-layout.dark-mode .formula-element.data-point {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+.main-layout.dark-mode .formula-element.global-value {
+  background: #064e3b;
+  color: #6ee7b7;
+}
+
+.main-layout.dark-mode .formula-element.measure-ref {
+  background: #78350f;
+  color: #fcd34d;
+}
+
+.main-layout.dark-mode .formula-element.static {
+  background: var(--gray-300);
+  color: var(--gray-900);
+}
+
+/* Dark mode: Calculation errors */
+.main-layout.dark-mode .calculation-errors {
+  background: #3b1111;
+  border-color: #7f1d1d;
+}
+
+.main-layout.dark-mode .calculation-errors .error-header {
+  color: #fca5a5;
+}
+
+.main-layout.dark-mode .calculation-errors .error-item {
+  background: var(--gray-200);
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
+.main-layout.dark-mode .calculation-errors .error-months {
+  color: #f87171;
+}
+
+.main-layout.dark-mode .formula-info .formula-missing {
+  color: #f87171;
+}
+
+/* Dark mode: Data entry table special rows */
+.main-layout.dark-mode .data-entry-table .calculated-cell {
+  background: rgba(114, 137, 218, 0.1);
+}
+
+.main-layout.dark-mode .data-entry-table .calculated-cell.has-error {
+  color: #fbbf24;
+  background: #422006;
+}
+
+.main-layout.dark-mode .data-entry-table .global-value-row {
+  background: #422006;
+}
+
+.main-layout.dark-mode .global-tag {
+  color: #fbbf24;
+}
+
+.main-layout.dark-mode .data-entry-table .gv-input {
+  background: #3b2506;
+  border-color: #92400e;
+  color: #fcd34d;
+}
+
+.main-layout.dark-mode .data-entry-table .gv-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.main-layout.dark-mode .data-entry-table .measure-ref-row {
+  background: #0c2d48;
+}
+
+.main-layout.dark-mode .data-entry-table .measure-ref-row .measure-ref-label {
+  color: #7dd3fc;
+}
+
+.main-layout.dark-mode .data-entry-table .measure-ref-value {
+  color: #38bdf8;
+}
+
+.main-layout.dark-mode .data-entry-table .target-cell.monthly-target {
+  background: rgba(114, 137, 218, 0.12);
+}
+
+/* Dark mode: Achievement indicators */
+.main-layout.dark-mode .data-entry-achievement.achievement-excellent {
+  background: #052e16;
+  border-color: #166534;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-excellent .value {
+  color: #4ade80;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-good {
+  background: #1e3a5f;
+  border-color: #1d4ed8;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-good .value {
+  color: #60a5fa;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-warning {
+  background: #422006;
+  border-color: #92400e;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-warning .value {
+  color: #fbbf24;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-poor {
+  background: #3b1111;
+  border-color: #991b1b;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-poor .value {
+  color: #f87171;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-excellent .achievement-fill {
+  background: #16a34a;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-good .achievement-fill {
+  background: #2563eb;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-warning .achievement-fill {
+  background: #d97706;
+}
+
+.main-layout.dark-mode .data-entry-achievement.achievement-poor .achievement-fill {
+  background: #dc2626;
+}
+
+/* Dark mode: Achievement cells in tables */
+.main-layout.dark-mode .data-entry-table .achievement-cell.achievement-excellent {
+  background: #052e16;
+  color: #4ade80;
+}
+
+.main-layout.dark-mode .data-entry-table .achievement-cell.achievement-good {
+  background: #1e3a5f;
+  color: #60a5fa;
+}
+
+.main-layout.dark-mode .data-entry-table .achievement-cell.achievement-warning {
+  background: #422006;
+  color: #fbbf24;
+}
+
+.main-layout.dark-mode .data-entry-table .achievement-cell.achievement-poor {
+  background: #3b1111;
+  color: #f87171;
+}
+
+/* Dark mode: Scorecard achievement cells */
+.main-layout.dark-mode .scorecard-table .achievement-cell.excellent {
+  color: #4ade80;
+}
+
+.main-layout.dark-mode .scorecard-table .achievement-cell.good {
+  color: #fbbf24;
+}
+
+.main-layout.dark-mode .scorecard-table .achievement-cell.warning {
+  color: #fb923c;
+}
+
+.main-layout.dark-mode .scorecard-table .achievement-cell.poor {
+  color: #f87171;
+}
+
+/* Dark mode: Approval badges */
+.main-layout.dark-mode .approval-badge.active {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+.main-layout.dark-mode .approval-badge.recommended {
+  background: #052e16;
+  color: #6ee7b7;
+}
+
+.main-layout.dark-mode .approval-badge.under-discussion {
+  background: #422006;
+  color: #fcd34d;
+}
+
+.main-layout.dark-mode .approval-badge.pending {
+  background: var(--gray-300);
+  color: var(--gray-600);
+}
+
+/* Dark mode: Child BU cards */
+.main-layout.dark-mode .child-bu-card.excellent {
+  background: #052e16;
+  border-left-color: #22c55e;
+}
+
+.main-layout.dark-mode .child-bu-card.good {
+  background: #422006;
+  border-left-color: #eab308;
+}
+
+.main-layout.dark-mode .child-bu-card.warning {
+  background: #431407;
+  border-left-color: #f97316;
+}
+
+.main-layout.dark-mode .child-bu-card.poor {
+  background: #3b1111;
+  border-left-color: #ef4444;
+}
+
+.main-layout.dark-mode .child-bu-card.excellent .child-bu-achievement {
+  color: #4ade80;
+}
+
+.main-layout.dark-mode .child-bu-card.good .child-bu-achievement {
+  color: #fbbf24;
+}
+
+.main-layout.dark-mode .child-bu-card.warning .child-bu-achievement {
+  color: #fb923c;
+}
+
+.main-layout.dark-mode .child-bu-card.poor .child-bu-achievement {
+  color: #f87171;
+}
+
