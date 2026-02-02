@@ -1,19 +1,47 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStrategy } from '../../contexts/StrategyContext';
-import { Settings, Building2 } from 'lucide-react';
+import { Settings, Building2, Calendar } from 'lucide-react';
 
 function OrgViewTab() {
+  const navigate = useNavigate();
   const {
     businessUnits,
     objectives,
     kpis,
     pillars,
-    teamMembers
+    teamMembers,
+    measures,
+    achievements,
+    settings
   } = useStrategy();
+
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
 
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [expandedOrgs, setExpandedOrgs] = useState({});
   const [expandedDetails, setExpandedDetails] = useState({});
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  const months = [
+    { short: 'Jan', full: 'January', idx: 0 },
+    { short: 'Feb', full: 'February', idx: 1 },
+    { short: 'Mar', full: 'March', idx: 2 },
+    { short: 'Apr', full: 'April', idx: 3 },
+    { short: 'May', full: 'May', idx: 4 },
+    { short: 'Jun', full: 'June', idx: 5 },
+    { short: 'Jul', full: 'July', idx: 6 },
+    { short: 'Aug', full: 'August', idx: 7 },
+    { short: 'Sep', full: 'September', idx: 8 },
+    { short: 'Oct', full: 'October', idx: 9 },
+    { short: 'Nov', full: 'November', idx: 10 },
+    { short: 'Dec', full: 'December', idx: 11 }
+  ];
+
+  // Get month key for achievements lookup
+  const getMonthKey = (monthIdx, year = selectedYear) => `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
 
   // Build organization tree structure
   const orgTree = useMemo(() => {
@@ -84,6 +112,75 @@ function OrgViewTab() {
     );
   };
 
+  // Get KPIs for a specific BU (through objectives)
+  const getKPIsForBUAchievement = useCallback((buCode) => {
+    const buObjectives = (objectives || []).filter(obj => obj.Business_Unit_Code === buCode);
+    const objectiveCodes = buObjectives.map(obj => obj.Code);
+    return (kpis || []).filter(kpi => objectiveCodes.includes(kpi.Objective_Code));
+  }, [objectives, kpis]);
+
+  // Get achievement for a KPI at a specific month
+  const getKPIAchievement = useCallback((kpiCode, monthIdx) => {
+    const measure = (measures || []).find(m => m.KPI_Code === kpiCode);
+    if (!measure) return null;
+    const monthKey = getMonthKey(monthIdx);
+    return achievements?.[measure.Code]?.[monthKey] ?? null;
+  }, [measures, achievements, selectedYear]);
+
+  // Get capped achievement value
+  const getCappedAchievement = useCallback((achievement) => {
+    if (achievement === null || achievement === undefined) return null;
+    const achievementCap = settings?.achievementCap ?? 120;
+    return Math.min(achievement, achievementCap);
+  }, [settings]);
+
+  // Calculate weighted achievement for a BU
+  const calculateBUAchievement = useCallback((buCode) => {
+    const buKPIs = getKPIsForBUAchievement(buCode);
+    if (buKPIs.length === 0) return null;
+
+    let totalWeight = 0;
+    let weightedSum = 0;
+
+    buKPIs.forEach(kpi => {
+      const weight = parseFloat(kpi.Weight) || 0;
+      const achievement = getKPIAchievement(kpi.Code, selectedMonth);
+
+      if (achievement !== null && weight > 0) {
+        const cappedAchievement = getCappedAchievement(achievement);
+        weightedSum += weight * cappedAchievement;
+        totalWeight += weight;
+      }
+    });
+
+    if (totalWeight === 0) return null;
+    return weightedSum / totalWeight;
+  }, [getKPIsForBUAchievement, getKPIAchievement, getCappedAchievement, selectedMonth]);
+
+  // Get achievement color based on thresholds
+  const getAchievementColor = useCallback((achievement) => {
+    if (achievement === null || achievement === undefined) return null;
+    const thresholdExcellent = settings?.thresholdExcellent ?? 100;
+    const thresholdGood = settings?.thresholdGood ?? 80;
+    const thresholdWarning = settings?.thresholdWarning ?? 60;
+
+    if (achievement >= thresholdExcellent) return settings?.colorExcellent || '#28a745';
+    if (achievement >= thresholdGood) return settings?.colorGood || '#ffc107';
+    if (achievement >= thresholdWarning) return settings?.colorWarning || '#fd7e14';
+    return settings?.colorPoor || '#dc3545';
+  }, [settings]);
+
+  // Navigate to scorecard for a BU
+  const navigateToScorecard = (buCode, buLevel) => {
+    const params = new URLSearchParams({
+      bu: buCode,
+      level: buLevel,
+      year: selectedYear,
+      month: selectedMonth
+    });
+    navigate(`/main/scorecard?${params.toString()}`);
+  };
+
   // Get pillar by code
   const getPillar = (pillarCode) => {
     return pillars.find(p => p.Code === pillarCode);
@@ -131,6 +228,8 @@ function OrgViewTab() {
     const allKPIs = getKPIsForBU(org.Code);
     const buEmployees = getEmployeesForBU(org.Code);
     const totalObjectives = buObjectives.length + operationalObjs.length;
+    const buAchievement = calculateBUAchievement(org.Code);
+    const achievementColor = getAchievementColor(buAchievement);
 
     const levelColors = {
       'L1': '#4472C4',
@@ -149,6 +248,16 @@ function OrgViewTab() {
           style={{ '--level-color': levelColors[org.Level] }}
           onClick={() => setSelectedOrg(org)}
         >
+          {/* Achievement badge on top-right */}
+          {buAchievement !== null && (
+            <div
+              className="org-achievement-badge"
+              style={{ backgroundColor: achievementColor }}
+              title={`Achievement: ${buAchievement.toFixed(1)}%`}
+            >
+              {buAchievement.toFixed(0)}%
+            </div>
+          )}
           <div className="org-box-level" style={{ backgroundColor: levelColors[org.Level] }}>
             {org.Level}
           </div>
@@ -165,6 +274,17 @@ function OrgViewTab() {
               <span>{buEmployees.length} Emp</span>
             </div>
           </div>
+          {/* Scorecard link button */}
+          <button
+            className="org-scorecard-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateToScorecard(org.Code, org.Level);
+            }}
+            title="View Scorecard"
+          >
+            →
+          </button>
           {hasChildren && (
             <button
               className={`org-expand-btn ${isExpanded ? 'expanded' : ''}`}
@@ -495,7 +615,28 @@ function OrgViewTab() {
       <div className="org-chart-header">
         <div>
           <h2>Organization Chart</h2>
-          <p>Click on any organization to view objectives and KPIs. Use +/− to expand or collapse branches.</p>
+          <p>Click on any organization to view details. Use arrow button to go to Scorecard.</p>
+        </div>
+        <div className="org-date-filter">
+          <Calendar size={16} />
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            className="month-select"
+          >
+            {months.map(m => (
+              <option key={m.idx} value={m.idx}>{m.full}</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="year-select"
+          >
+            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
         </div>
       </div>
 

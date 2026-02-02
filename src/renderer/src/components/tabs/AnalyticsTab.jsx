@@ -50,12 +50,21 @@ function AnalyticsTab() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [graphType, setGraphType] = useState('leaf-tree');
+  const [graphType, setGraphType] = useState('decomposition-tree');
   const [collapsedNodes, setCollapsedNodes] = useState(new Set());
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const currentYear = new Date().getFullYear();
+
+  // Map BU codes to abbreviations for display
+  const buMap = useMemo(() => {
+    const map = {};
+    businessUnits.forEach(bu => {
+      map[bu.Code] = bu.Abbreviation || bu.Code;
+    });
+    return map;
+  }, [businessUnits]);
 
   // ── Graph data ────────────────────────────────────────────────────────
 
@@ -94,20 +103,22 @@ function AnalyticsTab() {
       });
     });
 
-    measures.filter(m => m.Status === 'Active').forEach(m => {
-      nodes.push({
-        id: m.Code, type: 'measure', label: m.Name,
-        parentId: m.KPI_Code,
-        data: m
-      });
-    });
+    // Measures hidden from decomposition tree - code preserved
+    // measures.filter(m => m.Status === 'Active').forEach(m => {
+    //   nodes.push({
+    //     id: m.Code, type: 'measure', label: m.Name,
+    //     parentId: m.KPI_Code,
+    //     data: m
+    //   });
+    // });
 
-    globalValues.filter(gv => gv.Status === 'Active').forEach(gv => {
-      nodes.push({
-        id: gv.Code, type: 'global-value', label: gv.Name,
-        data: gv
-      });
-    });
+    // Global values hidden from decomposition tree - code preserved
+    // globalValues.filter(gv => gv.Status === 'Active').forEach(gv => {
+    //   nodes.push({
+    //     id: gv.Code, type: 'global-value', label: gv.Name,
+    //     data: gv
+    //   });
+    // });
 
     return nodes;
   }, [pillars, objectives, kpis, measures, globalValues]);
@@ -128,23 +139,23 @@ function AnalyticsTab() {
       }
     });
 
-    // Formula dependencies: measure → global values
-    measures.filter(m => m.Status === 'Active' && m.Formula_Elements).forEach(m => {
-      let elements = m.Formula_Elements;
-      if (typeof elements === 'string') {
-        try { elements = JSON.parse(elements); } catch { elements = []; }
-      }
-      if (Array.isArray(elements)) {
-        elements.forEach(el => {
-          if (el.type === 'globalValue' && el.code && nodeIds.has(el.code)) {
-            edges.push({ from: el.code, to: m.Code, type: 'formula-dep' });
-          }
-          if (el.type === 'measure-ref' && el.code && nodeIds.has(el.code)) {
-            edges.push({ from: el.code, to: m.Code, type: 'formula-dep' });
-          }
-        });
-      }
-    });
+    // Formula dependencies: measure → global values (hidden since measures are hidden)
+    // measures.filter(m => m.Status === 'Active' && m.Formula_Elements).forEach(m => {
+    //   let elements = m.Formula_Elements;
+    //   if (typeof elements === 'string') {
+    //     try { elements = JSON.parse(elements); } catch { elements = []; }
+    //   }
+    //   if (Array.isArray(elements)) {
+    //     elements.forEach(el => {
+    //       if (el.type === 'globalValue' && el.code && nodeIds.has(el.code)) {
+    //         edges.push({ from: el.code, to: m.Code, type: 'formula-dep' });
+    //       }
+    //       if (el.type === 'measure-ref' && el.code && nodeIds.has(el.code)) {
+    //         edges.push({ from: el.code, to: m.Code, type: 'formula-dep' });
+    //       }
+    //     });
+    //   }
+    // });
 
     return edges;
   }, [graphNodes, measures]);
@@ -274,10 +285,17 @@ function AnalyticsTab() {
 
   // ── Decomposition Tree Layout ─────────────────────────────────────────
 
-  const DECOMP_CARD_W = 180;
-  const DECOMP_CARD_H = 56;
-  const DECOMP_H_GAP = 24;
-  const DECOMP_V_GAP = 90;
+  const DECOMP_CARD_W = 260;
+  const DECOMP_CARD_H = 90;
+  const DECOMP_H_GAP = 32;
+  const DECOMP_V_GAP = 110;
+
+  // Node type map for sorting (objectives left, KPIs right)
+  const nodeTypeMap = useMemo(() => {
+    const map = {};
+    graphNodes.forEach(n => { map[n.id] = n.type; });
+    return map;
+  }, [graphNodes]);
 
   const decompPositions = useMemo(() => {
     if (graphType !== 'decomposition-tree') return {};
@@ -292,6 +310,17 @@ function AnalyticsTab() {
       if (!childMap[e.from]) childMap[e.from] = [];
       childMap[e.from].push(e.to);
       hasParent.add(e.to);
+    });
+
+    // Sort children: objectives first (left), then KPIs (right)
+    Object.keys(childMap).forEach(parentId => {
+      childMap[parentId].sort((a, b) => {
+        const typeA = nodeTypeMap[a] || '';
+        const typeB = nodeTypeMap[b] || '';
+        const isKpiA = typeA === 'kpi' ? 1 : 0;
+        const isKpiB = typeB === 'kpi' ? 1 : 0;
+        return isKpiA - isKpiB; // Objectives (0) come before KPIs (1)
+      });
     });
 
     // Root nodes: no parent in visible edges
@@ -364,7 +393,7 @@ function AnalyticsTab() {
     });
 
     return positions;
-  }, [graphType, graphNodes, graphEdges, visibleNodeIds]);
+  }, [graphType, graphNodes, graphEdges, visibleNodeIds, nodeTypeMap]);
 
   // ── Canvas dimensions (shared) ──────────────────────────────────────
 
@@ -477,6 +506,45 @@ function AnalyticsTab() {
     return settings.colorPoor || '#dc3545';
   }, [settings]);
 
+  // ── Calculate objective achievements based on weighted KPI achievements ──
+  const objectiveAchievements = useMemo(() => {
+    const monthKey = `${currentYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+    const results = {};
+
+    // Get all objectives
+    const activeObjectives = objectives.filter(o => o.Status === 'Active' && !o.Is_Operational);
+
+    activeObjectives.forEach(obj => {
+      // Find KPIs directly linked to this objective
+      const objKpis = kpis.filter(k => k.Objective_Code === obj.Code && k.Status === 'Active');
+
+      if (objKpis.length === 0) {
+        results[obj.Code] = null;
+        return;
+      }
+
+      let totalWeight = 0;
+      let weightedSum = 0;
+
+      objKpis.forEach(kpi => {
+        const weight = parseFloat(kpi.Weight) || 0;
+        const measure = measures.find(m => m.KPI_Code === kpi.Code && m.Status === 'Active');
+
+        if (measure && achievements?.[measure.Code]?.[monthKey] != null && weight > 0) {
+          const achievement = parseFloat(achievements[measure.Code][monthKey]);
+          // Cap achievement at 120% for weighted calculation
+          const cappedAchievement = Math.min(achievement, settings?.achievementCap ?? 120);
+          weightedSum += weight * cappedAchievement;
+          totalWeight += weight;
+        }
+      });
+
+      results[obj.Code] = totalWeight > 0 ? weightedSum / totalWeight : null;
+    });
+
+    return results;
+  }, [objectives, kpis, measures, achievements, selectedMonth, currentYear, settings]);
+
   // ── Graph interaction ─────────────────────────────────────────────────
 
   const connectedIds = useMemo(() => {
@@ -492,6 +560,39 @@ function AnalyticsTab() {
     }
     return ids;
   }, [selectedNode, graphEdges]);
+
+  // Get all descendant IDs (downstream only) from a selected node
+  const descendantIds = useMemo(() => {
+    if (!selectedNode) return null;
+    const ids = new Set([selectedNode]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      graphEdges.forEach(e => {
+        // Only traverse downstream (from parent to child)
+        if (ids.has(e.from) && !ids.has(e.to)) {
+          ids.add(e.to);
+          changed = true;
+        }
+      });
+    }
+    return ids;
+  }, [selectedNode, graphEdges]);
+
+  // Filter sensitivity data based on selected node's descendants
+  const filteredSensitivityData = useMemo(() => {
+    if (!selectedNode || !descendantIds) {
+      return sensitivityData;
+    }
+    // Filter to only KPIs that are descendants of the selected node
+    return sensitivityData.filter(s => descendantIds.has(s.kpiCode));
+  }, [selectedNode, descendantIds, sensitivityData]);
+
+  // Get selected node info for display
+  const selectedNodeInfo = useMemo(() => {
+    if (!selectedNode) return null;
+    return graphNodes.find(n => n.id === selectedNode);
+  }, [selectedNode, graphNodes]);
 
   const getNodeDetails = useCallback((nodeId) => {
     const node = graphNodes.find(n => n.id === nodeId);
@@ -526,7 +627,9 @@ function AnalyticsTab() {
         <div className="support-graph-main">
           {/* Controls */}
           <div className="support-graph-controls">
+            {/* Graph type toggle - Leaf Tree hidden but code preserved */}
             <div className="support-graph-type-toggle">
+              {/* Leaf Tree button hidden - uncomment to re-enable
               <button
                 className={graphType === 'leaf-tree' ? 'active' : ''}
                 onClick={() => setGraphType('leaf-tree')}
@@ -536,6 +639,7 @@ function AnalyticsTab() {
                 </svg>
                 Leaf Tree
               </button>
+              */}
               <button
                 className={graphType === 'decomposition-tree' ? 'active' : ''}
                 onClick={() => setGraphType('decomposition-tree')}
@@ -572,7 +676,9 @@ function AnalyticsTab() {
             </div>
 
             <div className="support-graph-legend">
-              {Object.entries(NODE_COLORS).map(([type, color]) => (
+              {Object.entries(NODE_COLORS)
+                .filter(([type]) => type !== 'measure' && type !== 'global-value')
+                .map(([type, color]) => (
                 <span key={type} className="support-legend-item">
                   <span className="support-legend-dot" style={{ background: color }}></span>
                   {NODE_TYPE_LABELS[type]}
@@ -758,24 +864,36 @@ function AnalyticsTab() {
                       const isTopLeverage = topLeverageIds.has(node.id);
                       const hasChildren = childCountMap[node.id] > 0;
                       const isCollapsed = collapsedNodes.has(node.id);
+                      const isKpi = node.type === 'kpi';
+                      const isObjective = node.type.startsWith('objective');
 
-                      let fillColor = NODE_COLORS[node.type] || '#ADB5BD';
-                      if (node.type === 'kpi') {
+                      // Get achievement for this node
+                      let nodeAchievement = null;
+                      if (isKpi) {
                         const measure = measures.find(m => m.KPI_Code === node.id && m.Status === 'Active');
                         const monthKey = `${currentYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
-                        const ach = measure && achievements?.[measure.Code]?.[monthKey] != null
+                        nodeAchievement = measure && achievements?.[measure.Code]?.[monthKey] != null
                           ? parseFloat(achievements[measure.Code][monthKey])
                           : null;
-                        fillColor = getAchievementColor(ach);
+                      } else if (isObjective) {
+                        nodeAchievement = objectiveAchievements[node.id] ?? null;
+                      }
+
+                      let fillColor = NODE_COLORS[node.type] || '#ADB5BD';
+                      if (isKpi || isObjective) {
+                        fillColor = getAchievementColor(nodeAchievement);
                       }
                       if (node.type === 'pillar' && node.color) fillColor = node.color;
 
                       const truncLabel = node.label.length > 22 ? node.label.substring(0, 20) + '...' : node.label;
 
+                      // KPIs have rounded corners, objectives have sharp corners
+                      const cardRadius = isKpi ? 20 : 4;
+
                       return (
                         <g
                           key={node.id}
-                          className={`support-graph-node decomp-node ${isDimmed ? 'dimmed' : ''} ${isSelected ? 'selected' : ''}`}
+                          className={`support-graph-node decomp-node ${isDimmed ? 'dimmed' : ''} ${isSelected ? 'selected' : ''} ${isKpi ? 'kpi-node' : 'obj-node'}`}
                           onClick={(e) => { e.stopPropagation(); setSelectedNode(node.id); }}
                           onDoubleClick={(e) => { if (hasChildren) toggleCollapse(node.id, e); }}
                           onMouseEnter={() => setHoveredNode(node.id)}
@@ -787,7 +905,7 @@ function AnalyticsTab() {
                             <rect
                               x={pos.x - 4} y={pos.y - 4}
                               width={DECOMP_CARD_W + 8} height={DECOMP_CARD_H + 8}
-                              rx="8" fill="none" stroke={fillColor} strokeWidth="2"
+                              rx={cardRadius + 2} fill="none" stroke={fillColor} strokeWidth="2"
                               className="sensitivity-halo"
                             />
                           )}
@@ -797,69 +915,134 @@ function AnalyticsTab() {
                             <rect
                               x={pos.x - 3} y={pos.y - 3}
                               width={DECOMP_CARD_W + 6} height={DECOMP_CARD_H + 6}
-                              rx="7" fill="none" stroke="#4472C4" strokeWidth="3"
+                              rx={cardRadius + 1} fill="none" stroke="#4472C4" strokeWidth="3"
                             />
                           )}
 
-                          {/* Card background */}
+                          {/* Card background - KPIs have dashed border */}
                           <rect
                             x={pos.x} y={pos.y}
                             width={DECOMP_CARD_W} height={DECOMP_CARD_H}
-                            rx="6" fill="#fff"
-                            stroke={isHovered ? '#4472C4' : '#dee2e6'}
-                            strokeWidth={isHovered ? 2 : 1}
+                            rx={cardRadius}
+                            fill={isKpi ? '#f8f9fa' : '#fff'}
+                            stroke={isHovered ? '#4472C4' : (isKpi ? '#6c757d' : '#dee2e6')}
+                            strokeWidth={isHovered ? 2 : (isKpi ? 1.5 : 1)}
+                            strokeDasharray={isKpi ? '4,2' : 'none'}
                             className="decomp-card-bg"
                           />
 
-                          {/* Left color stripe */}
-                          <rect
-                            x={pos.x} y={pos.y}
-                            width={5} height={DECOMP_CARD_H}
-                            rx="0" fill={fillColor}
-                            style={{ clipPath: 'inset(0 0 0 0 round 6px 0 0 6px)' }}
-                          />
-                          <rect x={pos.x} y={pos.y} width={5} height={DECOMP_CARD_H} fill={fillColor} />
-                          {/* Rounded left corners */}
-                          <rect x={pos.x} y={pos.y} width={6} height={DECOMP_CARD_H} rx="6" fill={fillColor} />
-                          <rect x={pos.x + 3} y={pos.y} width={3} height={DECOMP_CARD_H} fill={fillColor} />
+                          {/* Left color stripe - thicker for objectives, icon area for KPIs */}
+                          {isKpi ? (
+                            <>
+                              {/* KPI: colored left bar with target icon */}
+                              <rect x={pos.x} y={pos.y} width={32} height={DECOMP_CARD_H} rx={cardRadius} fill={fillColor} />
+                              <rect x={pos.x + 16} y={pos.y} width={16} height={DECOMP_CARD_H} fill={fillColor} />
+                              {/* Target icon */}
+                              <circle cx={pos.x + 16} cy={pos.y + DECOMP_CARD_H / 2} r="10" fill="none" stroke="#fff" strokeWidth="2" />
+                              <circle cx={pos.x + 16} cy={pos.y + DECOMP_CARD_H / 2} r="4" fill="#fff" />
+                            </>
+                          ) : (
+                            <>
+                              {/* Objective: left stripe */}
+                              <rect x={pos.x} y={pos.y} width={10} height={DECOMP_CARD_H} rx={cardRadius} fill={fillColor} />
+                              <rect x={pos.x + 5} y={pos.y} width={5} height={DECOMP_CARD_H} fill={fillColor} />
+                            </>
+                          )}
 
                           {/* Type label */}
-                          <text x={pos.x + 14} y={pos.y + 15} fontSize="9" fill="#6c757d" fontWeight="500" className="decomp-type-label">
+                          <text x={pos.x + (isKpi ? 42 : 20)} y={pos.y + 22} fontSize="11" fill="#6c757d" fontWeight="500" className="decomp-type-label">
                             {NODE_TYPE_LABELS[node.type]}
                           </text>
 
-                          {/* Node label */}
-                          <text x={pos.x + 14} y={pos.y + 32} fontSize="11" fontWeight="600" fill="#212529" className="decomp-card-label">
-                            {truncLabel}
-                          </text>
+                          {/* Node label - dynamic font size for long names */}
+                          {(() => {
+                            const labelLen = node.label.length;
+                            const leftOffset = isKpi ? 42 : 20;
+                            let fontSize, maxChars;
 
-                          {/* Weight badge */}
-                          {node.weight > 0 && (
-                            <g>
-                              <rect x={pos.x + DECOMP_CARD_W - 38} y={pos.y + 6} width={30} height={16} rx="8" fill={fillColor} opacity="0.9" />
-                              <text x={pos.x + DECOMP_CARD_W - 23} y={pos.y + 17} textAnchor="middle" fill="#fff" fontSize="9" fontWeight="600">
-                                {node.weight}%
+                            // Dynamic font sizing for both KPIs and Objectives
+                            if (labelLen > 45) {
+                              fontSize = 9;
+                              maxChars = 50;
+                            } else if (labelLen > 38) {
+                              fontSize = 10;
+                              maxChars = 45;
+                            } else if (labelLen > 30) {
+                              fontSize = 11;
+                              maxChars = 38;
+                            } else if (labelLen > 24) {
+                              fontSize = 12;
+                              maxChars = 32;
+                            } else {
+                              fontSize = 13;
+                              maxChars = 28;
+                            }
+
+                            const displayLabel = labelLen > maxChars ? node.label.substring(0, maxChars - 2) + '...' : node.label;
+                            return (
+                              <text x={pos.x + leftOffset} y={pos.y + 45} fontSize={fontSize} fontWeight="600" fill="#212529" className="decomp-card-label">
+                                {displayLabel}
                               </text>
-                            </g>
-                          )}
+                            );
+                          })()}
 
-                          {/* Hidden children badge */}
-                          {isCollapsed && hiddenDescendantCount[node.id] > 0 && (
-                            <g>
-                              <rect x={pos.x + DECOMP_CARD_W - 38} y={pos.y + DECOMP_CARD_H - 20} width={30} height={14} rx="7" fill="#6c757d" />
-                              <text x={pos.x + DECOMP_CARD_W - 23} y={pos.y + DECOMP_CARD_H - 10} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="600">
-                                +{hiddenDescendantCount[node.id]}
-                              </text>
-                            </g>
-                          )}
+                          {/* Bottom row: Achievement | BU | Weight - spaced out */}
+                          <g>
+                            {/* Achievement badge - left */}
+                            {nodeAchievement !== null && (
+                              <g>
+                                <rect x={pos.x + (isKpi ? 42 : 20)} y={pos.y + DECOMP_CARD_H - 28} width={50} height={20} rx="10" fill={fillColor} />
+                                <text x={pos.x + (isKpi ? 67 : 45)} y={pos.y + DECOMP_CARD_H - 14} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600">
+                                  {nodeAchievement.toFixed(0)}%
+                                </text>
+                              </g>
+                            )}
 
-                          {/* Collapse/expand button at bottom center */}
+                            {/* Business Unit badge - center */}
+                            {node.buCode && buMap[node.buCode] && (
+                              <g>
+                                <rect
+                                  x={pos.x + DECOMP_CARD_W / 2 - 28}
+                                  y={pos.y + DECOMP_CARD_H - 28}
+                                  width={56} height={20} rx="4" fill="#e9ecef" stroke="#dee2e6" strokeWidth="0.5"
+                                />
+                                <text
+                                  x={pos.x + DECOMP_CARD_W / 2}
+                                  y={pos.y + DECOMP_CARD_H - 14}
+                                  textAnchor="middle" fill="#495057" fontSize="10" fontWeight="600"
+                                >
+                                  {buMap[node.buCode].length > 7 ? buMap[node.buCode].substring(0, 7) : buMap[node.buCode]}
+                                </text>
+                              </g>
+                            )}
+
+                            {/* Weight badge - right */}
+                            {node.weight > 0 && (
+                              <g>
+                                <rect x={pos.x + DECOMP_CARD_W - 58} y={pos.y + DECOMP_CARD_H - 28} width={50} height={20} rx="10" fill="#495057" />
+                                <text x={pos.x + DECOMP_CARD_W - 33} y={pos.y + DECOMP_CARD_H - 14} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600">
+                                  {node.weight}%
+                                </text>
+                              </g>
+                            )}
+                          </g>
+
+                          {/* Collapse/expand button at bottom center with hidden count */}
                           {hasChildren && (
-                            <g onClick={(e) => toggleCollapse(node.id, e)} className="collapse-btn-group">
-                              <circle cx={pos.x + DECOMP_CARD_W / 2} cy={pos.y + DECOMP_CARD_H + 10} r="8" fill="#fff" stroke="#6c757d" strokeWidth="1.5" />
-                              <text x={pos.x + DECOMP_CARD_W / 2} y={pos.y + DECOMP_CARD_H + 14} textAnchor="middle" fontSize="13" fontWeight="700" fill="#495057">
+                            <g onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id, e); }} className="collapse-btn-group">
+                              <circle cx={pos.x + DECOMP_CARD_W / 2} cy={pos.y + DECOMP_CARD_H + 14} r="12" fill="#fff" stroke="#6c757d" strokeWidth="2" />
+                              <text x={pos.x + DECOMP_CARD_W / 2} y={pos.y + DECOMP_CARD_H + 19} textAnchor="middle" fontSize="18" fontWeight="700" fill="#495057">
                                 {isCollapsed ? '+' : '-'}
                               </text>
+                              {/* Hidden children count badge - shown next to collapse button when collapsed */}
+                              {isCollapsed && hiddenDescendantCount[node.id] > 0 && (
+                                <g>
+                                  <rect x={pos.x + DECOMP_CARD_W / 2 + 16} y={pos.y + DECOMP_CARD_H + 4} width={32} height={18} rx="9" fill="#6c757d" />
+                                  <text x={pos.x + DECOMP_CARD_W / 2 + 32} y={pos.y + DECOMP_CARD_H + 16} textAnchor="middle" fill="#fff" fontSize="10" fontWeight="600">
+                                    {hiddenDescendantCount[node.id]}
+                                  </text>
+                                </g>
+                              )}
                             </g>
                           )}
                         </g>
@@ -882,13 +1065,25 @@ function AnalyticsTab() {
                     const node = graphNodes.find(n => n.id === hoveredNode);
                     if (!node) return null;
                     const sens = sensitivityData.find(s => s.kpiCode === node.id);
+                    const isObjective = node.type.startsWith('objective');
+                    const objAch = isObjective ? objectiveAchievements[node.id] : null;
                     return (
                       <>
                         <strong>{node.label}</strong>
                         <div className="tooltip-type">{NODE_TYPE_LABELS[node.type]}</div>
+                        {node.buCode && buMap[node.buCode] && (
+                          <div>BU: {buMap[node.buCode]}</div>
+                        )}
                         {node.weight > 0 && <div>Weight: {node.weight}%</div>}
+                        {isObjective && objAch !== null && (
+                          <div style={{ color: getAchievementColor(objAch) }}>
+                            Achievement: {objAch.toFixed(1)}%
+                          </div>
+                        )}
                         {sens && sens.currentAchievement !== null && (
-                          <div>Achievement: {sens.currentAchievement.toFixed(1)}%</div>
+                          <div style={{ color: getAchievementColor(sens.currentAchievement) }}>
+                            Achievement: {sens.currentAchievement.toFixed(1)}%
+                          </div>
                         )}
                         {sens && <div>Leverage: {sens.leverageScore.toFixed(2)}</div>}
                       </>
@@ -902,14 +1097,31 @@ function AnalyticsTab() {
           {/* Sensitivity Panel */}
           {hasData && sensitivityData.length > 0 && (
             <div className="support-sensitivity-panel">
-              <h3>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                Highest-Leverage Improvement Opportunities
-              </h3>
+              <div className="sensitivity-header">
+                <h3>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                  </svg>
+                  Highest-Leverage Improvement Opportunities
+                </h3>
+                {selectedNodeInfo && selectedNodeInfo.type !== 'kpi' && (
+                  <div className="sensitivity-filter-badge">
+                    <span>Filtered by: <strong>{selectedNodeInfo.label}</strong></span>
+                    <button
+                      className="clear-filter-btn"
+                      onClick={() => setSelectedNode(null)}
+                      title="Clear filter"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
               <p className="sensitivity-description">
-                KPIs ranked by potential impact — improving these will have the largest effect on overall organizational performance.
+                {selectedNodeInfo && selectedNodeInfo.type !== 'kpi'
+                  ? `Showing ${filteredSensitivityData.length} KPIs under "${selectedNodeInfo.label}" — click on any objective/pillar in the tree to filter.`
+                  : 'KPIs ranked by potential impact — click on any objective/pillar in the tree to filter.'
+                }
               </p>
               <div className="sensitivity-table-wrapper">
                 <table className="sensitivity-table">
@@ -927,30 +1139,38 @@ function AnalyticsTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sensitivityData.slice(0, 10).map((s, i) => (
-                      <tr
-                        key={s.kpiCode}
-                        className={`sensitivity-row ${selectedNode === s.kpiCode ? 'active' : ''} ${i < 5 ? 'top-leverage' : ''}`}
-                        onClick={() => setSelectedNode(s.kpiCode)}
-                      >
-                        <td className="rank-cell">{i + 1}</td>
-                        <td className="kpi-name-cell">{s.kpiName}</td>
-                        <td>{s.objectiveName}</td>
-                        <td>{s.pillarName}</td>
-                        <td>{s.kpiWeight}%</td>
-                        <td>
-                          <span
-                            className="achievement-badge"
-                            style={{ background: getAchievementColor(s.currentAchievement), color: '#fff' }}
-                          >
-                            {s.currentAchievement !== null ? `${s.currentAchievement.toFixed(1)}%` : 'No data'}
-                          </span>
+                    {filteredSensitivityData.length === 0 ? (
+                      <tr>
+                        <td colSpan="9" style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
+                          No KPIs found under the selected node
                         </td>
-                        <td>{s.achievementGap.toFixed(1)}%</td>
-                        <td className="leverage-cell">{s.leverageScore.toFixed(2)}</td>
-                        <td className="impact-cell">+{s.impactOf10Pct.toFixed(2)}pts</td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredSensitivityData.slice(0, 15).map((s, i) => (
+                        <tr
+                          key={s.kpiCode}
+                          className={`sensitivity-row ${selectedNode === s.kpiCode ? 'active' : ''} ${i < 5 ? 'top-leverage' : ''}`}
+                          onClick={() => setSelectedNode(s.kpiCode)}
+                        >
+                          <td className="rank-cell">{i + 1}</td>
+                          <td className="kpi-name-cell">{s.kpiName}</td>
+                          <td>{s.objectiveName}</td>
+                          <td>{s.pillarName}</td>
+                          <td>{s.kpiWeight}%</td>
+                          <td>
+                            <span
+                              className="achievement-badge"
+                              style={{ background: getAchievementColor(s.currentAchievement), color: '#fff' }}
+                            >
+                              {s.currentAchievement !== null ? `${s.currentAchievement.toFixed(1)}%` : 'No data'}
+                            </span>
+                          </td>
+                          <td>{s.achievementGap.toFixed(1)}%</td>
+                          <td className="leverage-cell">{s.leverageScore.toFixed(2)}</td>
+                          <td className="impact-cell">+{s.impactOf10Pct.toFixed(2)}pts</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

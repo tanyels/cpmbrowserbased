@@ -143,7 +143,7 @@ function MainLayout() {
     <div className={`main-layout${darkMode ? ' dark-mode' : ''}`}>
       <header className="main-header">
         <div className="header-left">
-          <button className="btn btn-ghost btn-sm" onClick={handleClose}>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} title="Go to previous view">
             ← Back
           </button>
           {companyInfo?.logo && (
@@ -170,6 +170,13 @@ function MainLayout() {
             disabled={isSaving || !hasUnsavedChanges}
           >
             {isSaving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={handleClose}
+            title="Close file and exit"
+          >
+            Exit
           </button>
         </div>
       </header>

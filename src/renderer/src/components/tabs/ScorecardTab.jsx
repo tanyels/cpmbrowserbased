@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useStrategy } from '../../contexts/StrategyContext';
 import { BarChart3 } from 'lucide-react';
 
@@ -6,6 +7,7 @@ import { BarChart3 } from 'lucide-react';
 // SCORECARD TAB - Main Component
 // ============================================
 function ScorecardTab() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     measures,
     kpis,
@@ -20,12 +22,19 @@ function ScorecardTab() {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
-  const [selectedLevel, setSelectedLevel] = useState('L1');
+  // Read URL params for initial state
+  const urlBU = searchParams.get('bu');
+  const urlLevel = searchParams.get('level');
+  const urlYear = searchParams.get('year');
+  const urlMonth = searchParams.get('month');
+
+  const [selectedLevel, setSelectedLevel] = useState(urlLevel || 'L1');
   const [selectedL2BU, setSelectedL2BU] = useState('');
-  const [selectedBU, setSelectedBU] = useState('');
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedBU, setSelectedBU] = useState(urlBU || '');
+  const [selectedYear, setSelectedYear] = useState(urlYear ? parseInt(urlYear) : currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(urlMonth !== null ? parseInt(urlMonth) : currentMonth);
   const [showYTD, setShowYTD] = useState(false);
+  const [initializedFromUrl, setInitializedFromUrl] = useState(false);
 
   // KPI Detail Modal state
   const [selectedKPI, setSelectedKPI] = useState(null);
@@ -57,14 +66,33 @@ function ScorecardTab() {
     ? l3BusinessUnits.filter(bu => bu.Parent_Code === selectedL2BU)
     : l3BusinessUnits;
 
-  // Auto-select first BU when level changes
+  // Handle URL params on initial load
   useEffect(() => {
+    if (!initializedFromUrl && urlBU && businessUnits.length > 0) {
+      const targetBU = businessUnits.find(bu => bu.Code === urlBU);
+      if (targetBU) {
+        setSelectedLevel(targetBU.Level);
+        setSelectedBU(targetBU.Code);
+        // If it's L3, set the L2 parent
+        if (targetBU.Level === 'L3' && targetBU.Parent_Code) {
+          setSelectedL2BU(targetBU.Parent_Code);
+        }
+        setInitializedFromUrl(true);
+        // Clear URL params after initialization
+        setSearchParams({});
+      }
+    }
+  }, [urlBU, businessUnits, initializedFromUrl, setSearchParams]);
+
+  // Auto-select first BU when level changes (only if not initialized from URL)
+  useEffect(() => {
+    if (initializedFromUrl) return;
     if (selectedLevel === 'L1' && l1BusinessUnits.length > 0 && !selectedBU) {
       setSelectedBU(l1BusinessUnits[0].Code);
     } else if (selectedLevel === 'L2' && l2BusinessUnits.length > 0 && !selectedBU) {
       setSelectedBU(l2BusinessUnits[0].Code);
     }
-  }, [selectedLevel, l1BusinessUnits, l2BusinessUnits]);
+  }, [selectedLevel, l1BusinessUnits, l2BusinessUnits, initializedFromUrl]);
 
   // Get month key
   const getMonthKey = (monthIdx, year = selectedYear) => `${year}-${String(monthIdx + 1).padStart(2, '0')}`;

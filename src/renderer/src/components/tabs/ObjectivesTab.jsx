@@ -61,6 +61,10 @@ function ObjectivesTab({ level }) {
   const [editingKPICode, setEditingKPICode] = useState(null);
   const [editingKPIData, setEditingKPIData] = useState(null);
 
+  // Quick-add modal state for adding child objectives directly from parent cards or global buttons
+  const [quickAddModal, setQuickAddModal] = useState(null); // { parentObj, childLevel } - parentObj can be null for global buttons
+  const [quickAddForm, setQuickAddForm] = useState({ Name: '', Name_AR: '', Weight: 0, Business_Unit_Code: '', Parent_Code: '' });
+
   const impactTypes = ['Direct', 'Indirect', 'Complimentary'];
   const indicatorTypes = ['Lagging', 'Leading'];
   const approvalStatuses = ['Recommended', 'Under Discussion', 'Locked'];
@@ -141,6 +145,58 @@ function ObjectivesTab({ level }) {
       Weight: parseFloat(newKPI.Weight) || 0
     });
     resetKPIForm();
+  };
+
+  // Handle quick-add child objective from modal
+  const handleQuickAddChild = () => {
+    if (!quickAddModal || !quickAddForm.Name.trim()) return;
+
+    const { parentObj, childLevel } = quickAddModal;
+
+    // Determine the actual parent - either from parentObj or from form selection
+    let actualParent = parentObj;
+    if (!parentObj && quickAddForm.Parent_Code) {
+      // Find the parent object based on the selected code
+      if (childLevel === 'L1') {
+        actualParent = pillars.find(p => p.Code === quickAddForm.Parent_Code);
+      } else if (childLevel === 'L2') {
+        actualParent = objectives.find(o => o.Code === quickAddForm.Parent_Code && o.Level === 'L1');
+      } else if (childLevel === 'L3') {
+        actualParent = objectives.find(o => o.Code === quickAddForm.Parent_Code && o.Level === 'L2');
+      }
+    }
+
+    if (!actualParent) return; // Need a parent
+
+    // For L1: actualParent is the Pillar, so Pillar_Code = actualParent.Code, no Parent_Objective_Code
+    // For L2: actualParent is L1 objective, so Pillar_Code = actualParent.Pillar_Code, Parent_Objective_Code = actualParent.Code
+    // For L3: actualParent is L2 objective, so no Pillar_Code, Parent_Objective_Code = actualParent.Code
+    addObjective({
+      Name: quickAddForm.Name.trim(),
+      Name_AR: quickAddForm.Name_AR,
+      Level: childLevel,
+      Weight: parseFloat(quickAddForm.Weight) || 0,
+      Business_Unit_Code: quickAddForm.Business_Unit_Code || '',
+      Pillar_Code: childLevel === 'L1' ? actualParent.Code : (childLevel === 'L2' ? actualParent.Pillar_Code : ''),
+      Parent_Objective_Code: childLevel === 'L1' ? '' : actualParent.Code,
+      Status: 'Active'
+    });
+
+    setQuickAddModal(null);
+    setQuickAddForm({ Name: '', Name_AR: '', Weight: 0, Business_Unit_Code: '', Parent_Code: '' });
+  };
+
+  // Open quick-add modal for adding child objective
+  // parentObj can be null for global buttons - user will select parent in modal
+  const openQuickAddModal = (parentObj, childLevel, defaultBU = '') => {
+    setQuickAddModal({ parentObj, childLevel });
+    setQuickAddForm({
+      Name: '',
+      Name_AR: '',
+      Weight: 0,
+      Business_Unit_Code: parentObj?.Business_Unit_Code || defaultBU || '',
+      Parent_Code: parentObj?.Code || ''
+    });
   };
 
   // Reset selections when level changes
@@ -468,8 +524,9 @@ function ObjectivesTab({ level }) {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setNewObj(prev => ({ ...prev, Pillar_Code: selectedPillar }));
-              setShowAddForm(true);
+              // If pillar is selected, use it as parent; otherwise, user selects in modal
+              const pillar = selectedPillar ? pillars.find(p => p.Code === selectedPillar) : null;
+              openQuickAddModal(pillar ? { Code: pillar.Code, Name: pillar.Name } : null, 'L1');
             }}
           >
             + Add L1 Objective
@@ -586,6 +643,15 @@ function ObjectivesTab({ level }) {
                         </>
                       )}
                     </div>
+                    {!isEmpty && pillarCode !== '_unassigned' && (
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => openQuickAddModal({ Code: pillarCode, Name: data.pillar.Name, Pillar_Code: pillarCode }, 'L1')}
+                        title="Add L1 Objective to this pillar"
+                      >
+                        + Add L1
+                      </button>
+                    )}
                   </div>
 
                   {isEmpty ? (
@@ -593,10 +659,7 @@ function ObjectivesTab({ level }) {
                       <p>No objectives assigned to this pillar yet.</p>
                       <button
                         className="btn btn-sm btn-outline"
-                        onClick={() => {
-                          setNewObj(prev => ({ ...prev, Pillar_Code: pillarCode }));
-                          setShowAddForm(true);
-                        }}
+                        onClick={() => openQuickAddModal({ Code: pillarCode, Name: data.pillar.Name }, 'L1')}
                       >
                         + Add Objective
                       </button>
@@ -1009,6 +1072,123 @@ function ObjectivesTab({ level }) {
               );
             })}
         </div>
+
+        {/* Quick Add Child Objective Modal */}
+        {quickAddModal && (
+          <div className="modal-overlay" onClick={() => setQuickAddModal(null)}>
+            <div className="modal-content quick-add-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Add {quickAddModal.childLevel} Objective</h3>
+                <button className="modal-close" onClick={() => setQuickAddModal(null)}>×</button>
+              </div>
+              <div className="modal-body">
+                {/* Parent selector - shown when parentObj is null */}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L1' && (
+                  <div className="form-group">
+                    <label>Pillar *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select Pillar...</option>
+                      {pillars.filter(p => p.Status === 'Active').map(p => (
+                        <option key={p.Code} value={p.Code}>{p.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L2' && (
+                  <div className="form-group">
+                    <label>Parent L1 Objective *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select L1 Objective...</option>
+                      {objectives.filter(o => o.Level === 'L1' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                        <option key={o.Code} value={o.Code}>{o.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L3' && (
+                  <div className="form-group">
+                    <label>Parent L2 Objective *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select L2 Objective...</option>
+                      {objectives.filter(o => o.Level === 'L2' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                        <option key={o.Code} value={o.Code}>{o.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {/* Show parent info when parentObj exists */}
+                {quickAddModal.parentObj && (
+                  <p className="modal-parent-info">
+                    Adding under: <strong>{quickAddModal.parentObj.Name}</strong> ({quickAddModal.parentObj.Code})
+                  </p>
+                )}
+                <div className="form-group">
+                  <label>Name (English) *</label>
+                  <input
+                    type="text"
+                    value={quickAddForm.Name}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Name: e.target.value })}
+                    placeholder="Objective name..."
+                    autoFocus={!!quickAddModal.parentObj}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Name (Arabic)</label>
+                  <input
+                    type="text"
+                    value={quickAddForm.Name_AR}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Name_AR: e.target.value })}
+                    placeholder="اسم الهدف..."
+                    dir="rtl"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Weight (%)</label>
+                  <input
+                    type="number"
+                    value={quickAddForm.Weight}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Weight: e.target.value })}
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                {quickAddModal.childLevel !== 'L1' && (
+                  <div className="form-group">
+                    <label>Business Unit</label>
+                    <select
+                      value={quickAddForm.Business_Unit_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Business_Unit_Code: e.target.value })}
+                    >
+                      <option value="">Select Business Unit...</option>
+                      {businessUnits.filter(bu => bu.Status === 'Active').map(bu => (
+                        <option key={bu.Code} value={bu.Code}>{bu.Abbreviation || bu.Name} - {bu.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => setQuickAddModal(null)}>Cancel</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleQuickAddChild}
+                  disabled={!quickAddForm.Name.trim() || (!quickAddModal.parentObj && !quickAddForm.Parent_Code)}
+                >
+                  Add {quickAddModal.childLevel} Objective
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1160,10 +1340,7 @@ function ObjectivesTab({ level }) {
               <div className="objectives-actions">
                 <button
                   className="btn btn-primary"
-                  onClick={() => {
-                    setNewObj(prev => ({ ...prev, Business_Unit_Code: selectedBU }));
-                    setShowAddForm(true);
-                  }}
+                  onClick={() => openQuickAddModal(null, 'L2', selectedBU)}
                 >
                   + Add L2 Objective
                 </button>
@@ -1289,6 +1466,15 @@ function ObjectivesTab({ level }) {
                               </>
                             )}
                           </div>
+                          {!isEmpty && (
+                            <button
+                              className="btn btn-sm btn-success"
+                              onClick={() => openQuickAddModal({ ...so, Business_Unit_Code: selectedBU }, 'L2')}
+                              title="Add L2 Objective under this L1"
+                            >
+                              + Add L2
+                            </button>
+                          )}
                         </div>
 
                         {isEmpty ? (
@@ -1296,10 +1482,7 @@ function ObjectivesTab({ level }) {
                             <p>No objectives under this SO yet.</p>
                             <button
                               className="btn btn-sm btn-outline"
-                              onClick={() => {
-                                setNewObj(prev => ({ ...prev, Parent_Objective_Code: soCode, Business_Unit_Code: selectedBU }));
-                                setShowAddForm(true);
-                              }}
+                              onClick={() => openQuickAddModal({ ...so, Business_Unit_Code: selectedBU }, 'L2')}
                             >
                               + Add Objective
                             </button>
@@ -1918,6 +2101,123 @@ function ObjectivesTab({ level }) {
             })()}
           </>
         )}
+
+        {/* Quick Add Child Objective Modal */}
+        {quickAddModal && (
+          <div className="modal-overlay" onClick={() => setQuickAddModal(null)}>
+            <div className="modal-content quick-add-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Add {quickAddModal.childLevel} Objective</h3>
+                <button className="modal-close" onClick={() => setQuickAddModal(null)}>×</button>
+              </div>
+              <div className="modal-body">
+                {/* Parent selector - shown when parentObj is null */}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L1' && (
+                  <div className="form-group">
+                    <label>Pillar *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select Pillar...</option>
+                      {pillars.filter(p => p.Status === 'Active').map(p => (
+                        <option key={p.Code} value={p.Code}>{p.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L2' && (
+                  <div className="form-group">
+                    <label>Parent L1 Objective *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select L1 Objective...</option>
+                      {objectives.filter(o => o.Level === 'L1' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                        <option key={o.Code} value={o.Code}>{o.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {!quickAddModal.parentObj && quickAddModal.childLevel === 'L3' && (
+                  <div className="form-group">
+                    <label>Parent L2 Objective *</label>
+                    <select
+                      value={quickAddForm.Parent_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                    >
+                      <option value="">Select L2 Objective...</option>
+                      {objectives.filter(o => o.Level === 'L2' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                        <option key={o.Code} value={o.Code}>{o.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {/* Show parent info when parentObj exists */}
+                {quickAddModal.parentObj && (
+                  <p className="modal-parent-info">
+                    Adding under: <strong>{quickAddModal.parentObj.Name}</strong> ({quickAddModal.parentObj.Code})
+                  </p>
+                )}
+                <div className="form-group">
+                  <label>Name (English) *</label>
+                  <input
+                    type="text"
+                    value={quickAddForm.Name}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Name: e.target.value })}
+                    placeholder="Objective name..."
+                    autoFocus={!!quickAddModal.parentObj}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Name (Arabic)</label>
+                  <input
+                    type="text"
+                    value={quickAddForm.Name_AR}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Name_AR: e.target.value })}
+                    placeholder="اسم الهدف..."
+                    dir="rtl"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Weight (%)</label>
+                  <input
+                    type="number"
+                    value={quickAddForm.Weight}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Weight: e.target.value })}
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                {quickAddModal.childLevel !== 'L1' && (
+                  <div className="form-group">
+                    <label>Business Unit</label>
+                    <select
+                      value={quickAddForm.Business_Unit_Code}
+                      onChange={(e) => setQuickAddForm({ ...quickAddForm, Business_Unit_Code: e.target.value })}
+                    >
+                      <option value="">Select Business Unit...</option>
+                      {businessUnits.filter(bu => bu.Status === 'Active').map(bu => (
+                        <option key={bu.Code} value={bu.Code}>{bu.Abbreviation || bu.Name} - {bu.Name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => setQuickAddModal(null)}>Cancel</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleQuickAddChild}
+                  disabled={!quickAddForm.Name.trim() || (!quickAddModal.parentObj && !quickAddForm.Parent_Code)}
+                >
+                  Add {quickAddModal.childLevel} Objective
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2082,7 +2382,7 @@ function ObjectivesTab({ level }) {
             <div className="objectives-actions">
               <button
                 className="btn btn-primary"
-                onClick={() => setShowAddForm(true)}
+                onClick={() => openQuickAddModal(null, 'L3', selectedBU)}
               >
                 + Add L3 Objective
               </button>
@@ -2208,6 +2508,15 @@ function ObjectivesTab({ level }) {
                             </>
                           )}
                         </div>
+                        {!isEmpty && (
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={() => openQuickAddModal({ ...l2Obj, Business_Unit_Code: selectedBU }, 'L3')}
+                            title="Add L3 Objective under this L2"
+                          >
+                            + Add L3
+                          </button>
+                        )}
                       </div>
 
                       {isEmpty ? (
@@ -2215,10 +2524,7 @@ function ObjectivesTab({ level }) {
                           <p>No objectives under this L2 Objective yet.</p>
                           <button
                             className="btn btn-sm btn-outline"
-                            onClick={() => {
-                              setNewObj(prev => ({ ...prev, Parent_Objective_Code: l2ObjCode, Business_Unit_Code: selectedBU }));
-                              setShowAddForm(true);
-                            }}
+                            onClick={() => openQuickAddModal({ ...l2Obj, Business_Unit_Code: selectedBU }, 'L3')}
                           >
                             + Add Objective
                           </button>
@@ -2835,6 +3141,123 @@ function ObjectivesTab({ level }) {
             );
           })()}
         </>
+      )}
+
+      {/* Quick Add Child Objective Modal */}
+      {quickAddModal && (
+        <div className="modal-overlay" onClick={() => setQuickAddModal(null)}>
+          <div className="modal-content quick-add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Add {quickAddModal.childLevel} Objective</h3>
+              <button className="modal-close" onClick={() => setQuickAddModal(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              {/* Parent selector - shown when parentObj is null */}
+              {!quickAddModal.parentObj && quickAddModal.childLevel === 'L1' && (
+                <div className="form-group">
+                  <label>Pillar *</label>
+                  <select
+                    value={quickAddForm.Parent_Code}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                  >
+                    <option value="">Select Pillar...</option>
+                    {pillars.filter(p => p.Status === 'Active').map(p => (
+                      <option key={p.Code} value={p.Code}>{p.Name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {!quickAddModal.parentObj && quickAddModal.childLevel === 'L2' && (
+                <div className="form-group">
+                  <label>Parent L1 Objective *</label>
+                  <select
+                    value={quickAddForm.Parent_Code}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                  >
+                    <option value="">Select L1 Objective...</option>
+                    {objectives.filter(o => o.Level === 'L1' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                      <option key={o.Code} value={o.Code}>{o.Name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {!quickAddModal.parentObj && quickAddModal.childLevel === 'L3' && (
+                <div className="form-group">
+                  <label>Parent L2 Objective *</label>
+                  <select
+                    value={quickAddForm.Parent_Code}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Parent_Code: e.target.value })}
+                  >
+                    <option value="">Select L2 Objective...</option>
+                    {objectives.filter(o => o.Level === 'L2' && o.Status === 'Active' && !o.Is_Operational).map(o => (
+                      <option key={o.Code} value={o.Code}>{o.Name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Show parent info when parentObj exists */}
+              {quickAddModal.parentObj && (
+                <p className="modal-parent-info">
+                  Adding under: <strong>{quickAddModal.parentObj.Name}</strong> ({quickAddModal.parentObj.Code})
+                </p>
+              )}
+              <div className="form-group">
+                <label>Name (English) *</label>
+                <input
+                  type="text"
+                  value={quickAddForm.Name}
+                  onChange={(e) => setQuickAddForm({ ...quickAddForm, Name: e.target.value })}
+                  placeholder="Objective name..."
+                  autoFocus={!!quickAddModal.parentObj}
+                />
+              </div>
+              <div className="form-group">
+                <label>Name (Arabic)</label>
+                <input
+                  type="text"
+                  value={quickAddForm.Name_AR}
+                  onChange={(e) => setQuickAddForm({ ...quickAddForm, Name_AR: e.target.value })}
+                  placeholder="اسم الهدف..."
+                  dir="rtl"
+                />
+              </div>
+              <div className="form-group">
+                <label>Weight (%)</label>
+                <input
+                  type="number"
+                  value={quickAddForm.Weight}
+                  onChange={(e) => setQuickAddForm({ ...quickAddForm, Weight: e.target.value })}
+                  min="0"
+                  max="100"
+                />
+              </div>
+              {quickAddModal.childLevel !== 'L1' && (
+                <div className="form-group">
+                  <label>Business Unit</label>
+                  <select
+                    value={quickAddForm.Business_Unit_Code}
+                    onChange={(e) => setQuickAddForm({ ...quickAddForm, Business_Unit_Code: e.target.value })}
+                  >
+                    <option value="">Select Business Unit...</option>
+                    {businessUnits.filter(bu => bu.Status === 'Active').map(bu => (
+                      <option key={bu.Code} value={bu.Code}>{bu.Abbreviation || bu.Name} - {bu.Name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setQuickAddModal(null)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                onClick={handleQuickAddChild}
+                disabled={!quickAddForm.Name.trim() || (!quickAddModal.parentObj && !quickAddForm.Parent_Code)}
+              >
+                Add {quickAddModal.childLevel} Objective
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
