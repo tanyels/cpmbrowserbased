@@ -15,6 +15,8 @@ import MeasureTab from './tabs/MeasureTab';
 import ScorecardTab from './tabs/ScorecardTab';
 import EmployeeScorecardView from './tabs/EmployeeScorecardView';
 import AdminTab from './tabs/AdminTab';
+import SupportTab from './tabs/SupportTab';
+import AnalyticsTab from './tabs/AnalyticsTab';
 
 function MainLayout() {
   const navigate = useNavigate();
@@ -66,6 +68,10 @@ function MainLayout() {
       setActiveCategory('measure');
     } else if (path.includes('/main/admin')) {
       setActiveCategory('settings');
+    } else if (path.includes('/main/analytics')) {
+      setActiveCategory('analytics');
+    } else if (path.includes('/main/support')) {
+      setActiveCategory('support');
     }
   }, [location.pathname]);
 
@@ -105,6 +111,10 @@ function MainLayout() {
       navigate('/main/measure');
     } else if (category === 'settings') {
       navigate('/main/admin');
+    } else if (category === 'analytics') {
+      navigate('/main/analytics');
+    } else if (category === 'support') {
+      navigate('/main/support');
     }
   };
 
@@ -167,6 +177,37 @@ function MainLayout() {
       {/* Horizontal Toolbar */}
       <aside className="main-toolbar">
         <nav className="toolbar-nav">
+          <div className="theme-toggle">
+            <button
+              className={`theme-toggle-btn ${!darkMode ? 'active' : ''}`}
+              onClick={() => { if (darkMode) toggleDarkMode(); }}
+              title="Light Mode"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </button>
+            <button
+              className={`theme-toggle-btn ${darkMode ? 'active' : ''}`}
+              onClick={() => { if (!darkMode) toggleDarkMode(); }}
+              title="Dark Mode"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div className="toolbar-divider"></div>
+
           <button
             className={`toolbar-item ${activeCategory === 'design' ? 'active' : ''}`}
             onClick={() => handleCategoryChange('design')}
@@ -235,33 +276,34 @@ function MainLayout() {
             <span className="toolbar-label">Settings</span>
           </button>
 
-          <div className="toolbar-spacer"></div>
-
           <button
-            className="toolbar-item toolbar-toggle-btn"
-            onClick={toggleDarkMode}
-            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className={`toolbar-item ${activeCategory === 'analytics' ? 'active' : ''}`}
+            onClick={() => handleCategoryChange('analytics')}
+            title="Analytics"
           >
             <span className="toolbar-icon">
-              {darkMode ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"></circle>
-                  <line x1="12" y1="1" x2="12" y2="3"></line>
-                  <line x1="12" y1="21" x2="12" y2="23"></line>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                  <line x1="1" y1="12" x2="3" y2="12"></line>
-                  <line x1="21" y1="12" x2="23" y2="12"></line>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-              )}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+              </svg>
             </span>
+            <span className="toolbar-label">Analytics</span>
           </button>
+
+          <button
+            className={`toolbar-item ${activeCategory === 'support' ? 'active' : ''}`}
+            onClick={() => handleCategoryChange('support')}
+            title="Support"
+          >
+            <span className="toolbar-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </span>
+            <span className="toolbar-label">Support</span>
+          </button>
+
         </nav>
       </aside>
 
@@ -336,6 +378,20 @@ function MainLayout() {
                 </NavLink>
               </>
             )}
+            {activeCategory === 'analytics' && (
+              <>
+                <NavLink to="/main/analytics" className={({ isActive }) => isActive ? 'nav-tab active' : 'nav-tab'}>
+                  Dependency Graph
+                </NavLink>
+              </>
+            )}
+            {activeCategory === 'support' && (
+              <>
+                <NavLink to="/main/support" className={({ isActive }) => isActive ? 'nav-tab active' : 'nav-tab'}>
+                  Documentation
+                </NavLink>
+              </>
+            )}
           </nav>
 
           <main className="main-content">
@@ -357,6 +413,8 @@ function MainLayout() {
               <Route path="scorecard" element={<ScorecardTab />} />
               <Route path="employee-scorecard" element={<EmployeeScorecardView />} />
               <Route path="admin" element={<AdminTab />} />
+              <Route path="analytics" element={<AnalyticsTab />} />
+              <Route path="support" element={<SupportTab />} />
               <Route path="*" element={<DashboardTab />} />
             </Routes>
           </main>
