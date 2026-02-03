@@ -3,6 +3,7 @@ import { useStrategy } from '../../contexts/StrategyContext';
 import { useLicense } from '../../contexts/LicenseContext';
 import { AlertTriangle, CheckCircle } from 'lucide-react';
 
+
 function KPIsTab() {
   const {
     kpis,
@@ -10,7 +11,8 @@ function KPIsTab() {
     updateKPI,
     deleteKPI,
     objectives,
-    businessUnits
+    businessUnits,
+    buScorecardConfig
   } = useStrategy();
 
   const { isFeatureAllowed, isReadOnly, featureLimits, isInTrial } = useLicense();
@@ -165,18 +167,41 @@ function KPIsTab() {
     const summaries = {};
     Object.entries(kpisByObjective).forEach(([objCode, objKpis]) => {
       const obj = objectives.find(o => o.Code === objCode);
-      const budget = parseFloat(obj?.Weight) || 0;
+      const isOperational = obj?.Is_Operational;
+      const buCode = obj?.Business_Unit_Code;
+
+      // Get the objective's weight - first check direct Weight field
+      let budget = parseFloat(obj?.Weight) || 0;
+
+      // If direct weight is 0, check buScorecardConfig (especially for Operational objectives)
+      // buScorecardConfig stores weights assigned to objectives by their BU
+      if (budget === 0 && buCode && buScorecardConfig) {
+        const buConfig = buScorecardConfig[buCode];
+        if (buConfig && buConfig[objCode] !== undefined) {
+          budget = parseFloat(buConfig[objCode]) || 0;
+        }
+      }
+
       const total = objKpis.reduce((sum, kpi) => sum + (parseFloat(kpi.Weight) || 0), 0);
+      const originalBudget = budget;
+
+      // If still no budget set but has KPIs, use KPI total as budget (for display purposes)
+      if (budget === 0 && total > 0) {
+        budget = total;
+      }
+
       summaries[objCode] = {
         objective: obj,
         budget,
         total,
         kpiCount: objKpis.length,
-        isValid: Math.abs(total - budget) < 0.01
+        isValid: Math.abs(total - budget) < 0.01,
+        isOperational,
+        noBudgetSet: originalBudget === 0
       };
     });
     return summaries;
-  }, [kpisByObjective, objectives]);
+  }, [kpisByObjective, objectives, buScorecardConfig]);
 
   // Get the selected BU name for display
   const selectedBUName = useMemo(() => {
@@ -392,11 +417,19 @@ function KPIsTab() {
           </div>
           <div className="weight-summaries-list">
             {Object.entries(objectiveWeightSummaries).map(([objCode, summary]) => (
-              <div key={objCode} className={`objective-weight-summary ${summary.isValid ? 'valid' : 'invalid'}`}>
+              <div key={objCode} className={`objective-weight-summary ${summary.isValid || summary.noBudgetSet ? 'valid' : 'invalid'}`}>
                 <div className="obj-summary-header">
-                  <span className="obj-name">{summary.objective?.Name || objCode}</span>
-                  <span className={`obj-status ${summary.isValid ? 'valid' : 'invalid'}`}>
-                    {summary.isValid ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                  <span className="obj-name">
+                    {summary.objective?.Name || objCode}
+                    {summary.isOperational && ' (Operational)'}
+                  </span>
+                  <span className={`obj-status ${summary.isValid || summary.noBudgetSet ? 'valid' : 'invalid'}`}>
+                    {summary.noBudgetSet
+                      ? <CheckCircle size={12} style={{ opacity: 0.5 }} />
+                      : summary.isValid
+                        ? <CheckCircle size={12} />
+                        : <AlertTriangle size={12} />
+                    }
                   </span>
                 </div>
                 <div className="obj-summary-bar">
@@ -407,7 +440,12 @@ function KPIsTab() {
                 </div>
                 <div className="obj-summary-details">
                   <span className="obj-kpi-count">{summary.kpiCount} KPI{summary.kpiCount !== 1 ? 's' : ''}</span>
-                  <span className="obj-weight-ratio">{summary.total.toFixed(0)}% / {summary.budget}%</span>
+                  <span className="obj-weight-ratio">
+                    {summary.noBudgetSet
+                      ? `${summary.total.toFixed(0)}% (no budget set)`
+                      : `${summary.total.toFixed(0)}% / ${summary.budget}%`
+                    }
+                  </span>
                 </div>
               </div>
             ))}
