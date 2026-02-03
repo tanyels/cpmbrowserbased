@@ -457,7 +457,7 @@ function LicenseScreen({ onContinue }) {
         </div>
 
         <footer className="license-footer">
-          <p>© {new Date().getFullYear()} Cahit Ural Kukner. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Transdata Bilgi Islem LTD STI. All rights reserved.</p>
         </footer>
       </div>
     </div>

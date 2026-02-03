@@ -1,11 +1,13 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useStrategy } from '../../contexts/StrategyContext';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
 
 // ============================================
 // SCORECARD TAB - Main Component
 // ============================================
 function ScorecardTab() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     measures,
     kpis,
@@ -20,17 +22,28 @@ function ScorecardTab() {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
 
-  const [selectedLevel, setSelectedLevel] = useState('L1');
+  // Read URL params for initial state
+  const urlBU = searchParams.get('bu');
+  const urlLevel = searchParams.get('level');
+  const urlYear = searchParams.get('year');
+  const urlMonth = searchParams.get('month');
+
+  const [selectedLevel, setSelectedLevel] = useState(urlLevel || 'L1');
   const [selectedL2BU, setSelectedL2BU] = useState('');
-  const [selectedBU, setSelectedBU] = useState('');
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedBU, setSelectedBU] = useState(urlBU || '');
+  const [selectedYear, setSelectedYear] = useState(urlYear ? parseInt(urlYear) : currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(urlMonth !== null ? parseInt(urlMonth) : currentMonth);
   const [showYTD, setShowYTD] = useState(false);
+  const [initializedFromUrl, setInitializedFromUrl] = useState(false);
 
   // KPI Detail Modal state
   const [selectedKPI, setSelectedKPI] = useState(null);
   const [isEditingKPI, setIsEditingKPI] = useState(false);
   const [kpiEditForm, setKpiEditForm] = useState({});
+
+  // Sorting state for KPI table
+  const [sortColumn, setSortColumn] = useState(null); // 'code', 'objective', 'status', 'weight', 'achievement'
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
 
   const months = [
     { short: 'Jan', full: 'January', idx: 0 },
@@ -57,14 +70,33 @@ function ScorecardTab() {
     ? l3BusinessUnits.filter(bu => bu.Parent_Code === selectedL2BU)
     : l3BusinessUnits;
 
-  // Auto-select first BU when level changes
+  // Handle URL params on initial load
   useEffect(() => {
+    if (!initializedFromUrl && urlBU && businessUnits.length > 0) {
+      const targetBU = businessUnits.find(bu => bu.Code === urlBU);
+      if (targetBU) {
+        setSelectedLevel(targetBU.Level);
+        setSelectedBU(targetBU.Code);
+        // If it's L3, set the L2 parent
+        if (targetBU.Level === 'L3' && targetBU.Parent_Code) {
+          setSelectedL2BU(targetBU.Parent_Code);
+        }
+        setInitializedFromUrl(true);
+        // Clear URL params after initialization
+        setSearchParams({});
+      }
+    }
+  }, [urlBU, businessUnits, initializedFromUrl, setSearchParams]);
+
+  // Auto-select first BU when level changes (only if not initialized from URL)
+  useEffect(() => {
+    if (initializedFromUrl) return;
     if (selectedLevel === 'L1' && l1BusinessUnits.length > 0 && !selectedBU) {
       setSelectedBU(l1BusinessUnits[0].Code);
     } else if (selectedLevel === 'L2' && l2BusinessUnits.length > 0 && !selectedBU) {
       setSelectedBU(l2BusinessUnits[0].Code);
     }
-  }, [selectedLevel, l1BusinessUnits, l2BusinessUnits]);
+  }, [selectedLevel, l1BusinessUnits, l2BusinessUnits, initializedFromUrl]);
 
   // Get month key
   const getMonthKey = (monthIdx, year = selectedYear) => `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
@@ -233,6 +265,78 @@ function ScorecardTab() {
   // Current BU data
   const currentBU = (businessUnits || []).find(bu => bu.Code === selectedBU);
   const currentKPIs = selectedBU ? getKPIsForBU(selectedBU) : [];
+
+  // Sorted KPIs based on current sort column and direction
+  const sortedKPIs = useMemo(() => {
+    if (!sortColumn || currentKPIs.length === 0) return currentKPIs;
+
+    const sorted = [...currentKPIs].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortColumn) {
+        case 'code':
+          // Sort by KPI Code
+          aVal = a.Code || '';
+          bVal = b.Code || '';
+          break;
+        case 'objective':
+          // Sort by Objective name
+          const objA = (objectives || []).find(o => o.Code === a.Objective_Code);
+          const objB = (objectives || []).find(o => o.Code === b.Objective_Code);
+          aVal = objA?.Name || '';
+          bVal = objB?.Name || '';
+          break;
+        case 'status':
+          aVal = a.Approval_Status || '';
+          bVal = b.Approval_Status || '';
+          break;
+        case 'weight':
+          aVal = parseFloat(a.Weight) || 0;
+          bVal = parseFloat(b.Weight) || 0;
+          break;
+        case 'achievement':
+          aVal = getKPIAchievement(a.Code, selectedMonth) ?? -Infinity;
+          bVal = getKPIAchievement(b.Code, selectedMonth) ?? -Infinity;
+          break;
+        default:
+          return 0;
+      }
+
+      // Compare values
+      if (typeof aVal === 'string') {
+        const comparison = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+        return sortDirection === 'asc' ? comparison : -comparison;
+      } else {
+        const comparison = aVal - bVal;
+        return sortDirection === 'asc' ? comparison : -comparison;
+      }
+    });
+
+    return sorted;
+  }, [currentKPIs, sortColumn, sortDirection, objectives, getKPIAchievement, selectedMonth]);
+
+  // Handle column header click for sorting
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column - default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort indicator component
+  const SortIndicator = ({ column }) => {
+    if (sortColumn !== column) {
+      return <span className="sort-indicator inactive">⇅</span>;
+    }
+    return sortDirection === 'asc'
+      ? <ChevronUp size={14} className="sort-indicator active" />
+      : <ChevronDown size={14} className="sort-indicator active" />;
+  };
+
   const currentAchievement = selectedBU
     ? (showYTD ? calculateYTDAchievement(selectedBU) : calculateBUAchievement(selectedBU))
     : null;
@@ -488,20 +592,30 @@ function ScorecardTab() {
             {currentKPIs.length === 0 ? (
               <p className="text-muted">No KPIs found for this business unit.</p>
             ) : (
-              <table className="scorecard-table">
+              <table className="scorecard-table sortable-table">
                 <thead>
                   <tr>
-                    <th>KPI Name</th>
-                    <th>Objective</th>
-                    <th>Status</th>
-                    <th>Weight</th>
+                    <th className="sortable-header" onClick={() => handleSort('code')}>
+                      KPI Name <SortIndicator column="code" />
+                    </th>
+                    <th className="sortable-header" onClick={() => handleSort('objective')}>
+                      Objective <SortIndicator column="objective" />
+                    </th>
+                    <th className="sortable-header" onClick={() => handleSort('status')}>
+                      Status <SortIndicator column="status" />
+                    </th>
+                    <th className="sortable-header" onClick={() => handleSort('weight')}>
+                      Weight <SortIndicator column="weight" />
+                    </th>
                     <th>Target</th>
                     <th>Actual</th>
-                    <th>Achievement</th>
+                    <th className="sortable-header" onClick={() => handleSort('achievement')}>
+                      Achievement <SortIndicator column="achievement" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {currentKPIs.map(kpi => {
+                  {sortedKPIs.map(kpi => {
                     const target = getKPITarget(kpi, selectedMonth);
                     const actual = getKPIActual(kpi.Code, selectedMonth);
                     const achievement = getKPIAchievement(kpi.Code, selectedMonth);

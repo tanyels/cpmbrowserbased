@@ -38,6 +38,7 @@ function TeamMembersTab() {
   const [expandedBUs, setExpandedBUs] = useState({});
   const [expandedManagers, setExpandedManagers] = useState({});
   const [detailTab, setDetailTab] = useState('info'); // 'info', 'objectives', 'kpis'
+  const [searchQuery, setSearchQuery] = useState(''); // Search filter for employees
 
   // New employee form state
   const [addingToManager, setAddingToManager] = useState(null); // For adding direct report
@@ -52,10 +53,6 @@ function TeamMembersTab() {
     Reports_To: '',
     Business_Unit_Code: ''
   });
-
-  // Business Unit cascading selection state
-  const [buLevel, setBuLevel] = useState('');
-  const [buL2Parent, setBuL2Parent] = useState('');
 
   // Objective form state
   const [showObjectiveForm, setShowObjectiveForm] = useState(false);
@@ -108,22 +105,33 @@ function TeamMembersTab() {
     }
   }, [showObjectiveForm]);
 
-  // Memoized selectors for cascading BU selection
-  const l2BusinessUnits = useMemo(() => {
-    return businessUnits.filter(bu => bu.Level === 'L2' && bu.Status === 'Active');
-  }, [businessUnits]);
-
-  const filteredBusinessUnits = useMemo(() => {
-    if (!buLevel) return businessUnits.filter(bu => bu.Status === 'Active');
-    if (buLevel === 'L3' && buL2Parent) {
-      return businessUnits.filter(bu => bu.Level === 'L3' && bu.Parent_Code === buL2Parent && bu.Status === 'Active');
-    }
-    return businessUnits.filter(bu => bu.Level === buLevel && bu.Status === 'Active');
-  }, [businessUnits, buLevel, buL2Parent]);
+  // Filter employees by search query
+  const matchesSearch = (member) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const matchesName = member.Name?.toLowerCase().includes(query);
+    const matchesNameAR = member.Name_AR?.includes(searchQuery);
+    const matchesID = member.Employee_ID?.toLowerCase().includes(query);
+    const matchesEmail = member.Email?.toLowerCase().includes(query);
+    return matchesName || matchesNameAR || matchesID || matchesEmail;
+  };
 
   // Build tree structure grouped by BU
   const employeeTree = useMemo(() => {
-    const activeMembers = teamMembers.filter(m => m.Status === 'Active');
+    let activeMembers = teamMembers.filter(m => m.Status === 'Active');
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      activeMembers = activeMembers.filter(m => {
+        const matchesName = m.Name?.toLowerCase().includes(query);
+        const matchesNameAR = m.Name_AR?.includes(searchQuery);
+        const matchesID = m.Employee_ID?.toLowerCase().includes(query);
+        const matchesEmail = m.Email?.toLowerCase().includes(query);
+        return matchesName || matchesNameAR || matchesID || matchesEmail;
+      });
+    }
+
     const tree = {};
 
     // Group by BU
@@ -151,7 +159,7 @@ function TeamMembersTab() {
     }
 
     return tree;
-  }, [teamMembers, businessUnits]);
+  }, [teamMembers, businessUnits, searchQuery]);
 
   // Build employee node with children (direct reports)
   function buildEmployeeNode(employee, allMembers) {
@@ -198,8 +206,6 @@ function TeamMembersTab() {
       Reports_To: '',
       Business_Unit_Code: ''
     });
-    setBuLevel('');
-    setBuL2Parent('');
     setShowAddForm(false);
     setAddingToBU(null);
     setAddingToManager(null);
@@ -244,7 +250,6 @@ function TeamMembersTab() {
 
   // Start adding employee to a specific BU
   const startAddToBU = (buCode) => {
-    const bu = businessUnits.find(b => b.Code === buCode);
     setNewEmployee({
       Employee_ID: '',
       Name: '',
@@ -256,15 +261,6 @@ function TeamMembersTab() {
       Reports_To: '',
       Business_Unit_Code: buCode
     });
-    // Pre-select the level and parent for cascading
-    if (bu) {
-      setBuLevel(bu.Level);
-      if (bu.Level === 'L3' && bu.Parent_Code) {
-        setBuL2Parent(bu.Parent_Code);
-      } else {
-        setBuL2Parent('');
-      }
-    }
     setAddingToBU(buCode);
     setAddingToManager(null);
     setShowAddForm(true);
@@ -272,7 +268,6 @@ function TeamMembersTab() {
 
   // Start adding employee as direct report to a manager
   const startAddToManager = (manager) => {
-    const bu = businessUnits.find(b => b.Code === manager.Business_Unit_Code);
     setNewEmployee({
       Employee_ID: '',
       Name: '',
@@ -284,15 +279,6 @@ function TeamMembersTab() {
       Reports_To: manager.Code,
       Business_Unit_Code: manager.Business_Unit_Code
     });
-    // Pre-select the level and parent for cascading
-    if (bu) {
-      setBuLevel(bu.Level);
-      if (bu.Level === 'L3' && bu.Parent_Code) {
-        setBuL2Parent(bu.Parent_Code);
-      } else {
-        setBuL2Parent('');
-      }
-    }
     setAddingToBU(manager.Business_Unit_Code);
     setAddingToManager(manager.Code);
     setShowAddForm(true);
@@ -498,38 +484,10 @@ function TeamMembersTab() {
   return (
     <div className="team-members-tab">
       <div className="tm-header">
-        <div className="tm-header-content">
-          <div>
-            <h2>Team Members</h2>
-            <p className="section-description">
-              Manage employees, their personal objectives, and individual KPIs
-            </p>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setNewEmployee({
-                Employee_ID: '',
-                Name: '',
-                Name_AR: '',
-                Job_Title: '',
-                Job_Title_AR: '',
-                Email: '',
-                Hire_Date: '',
-                Reports_To: '',
-                Business_Unit_Code: ''
-              });
-              setBuLevel('');
-              setBuL2Parent('');
-              setShowAddForm(true);
-              setAddingToBU(null);
-              setAddingToManager(null);
-            }}
-            disabled={!canAddMoreMembers || isReadOnly()}
-          >
-            + Add Employee
-          </button>
-        </div>
+        <h2>Team Members</h2>
+        <p className="section-description">
+          Manage employees, their personal objectives, and individual KPIs
+        </p>
       </div>
 
       <div className="tm-content">
@@ -537,6 +495,29 @@ function TeamMembersTab() {
         <div className="tm-tree-panel">
           <div className="tm-tree-header">
             <h3>Organization</h3>
+          </div>
+
+          {/* Search Filter */}
+          <div className="tm-search-filter">
+            <label className="search-label">Employee Search</label>
+            <div className="search-input-wrapper">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name or ID..."
+                className="search-input"
+              />
+              {searchQuery && (
+                <button
+                  className="search-clear-btn"
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
           {/* License limit warning */}
@@ -608,8 +589,36 @@ function TeamMembersTab() {
         </div>
 
         {/* Right Panel - Employee Details */}
-        <div className="tm-details-panel">
-          {selectedEmp ? (
+        <div className="tm-details-wrapper">
+          {/* Add Employee Button - Above the card */}
+          <div className="tm-details-header">
+            <h3>Employee Details</h3>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setNewEmployee({
+                  Employee_ID: '',
+                  Name: '',
+                  Name_AR: '',
+                  Job_Title: '',
+                  Job_Title_AR: '',
+                  Email: '',
+                  Hire_Date: '',
+                  Reports_To: '',
+                  Business_Unit_Code: ''
+                });
+                setShowAddForm(true);
+                setAddingToBU(null);
+                setAddingToManager(null);
+              }}
+              disabled={!canAddMoreMembers || isReadOnly()}
+            >
+              + Add Employee
+            </button>
+          </div>
+
+          <div className="tm-details-panel">
+            {selectedEmp ? (
             <>
               <div className="employee-detail-header">
                 <div className="employee-avatar-large">
@@ -1126,6 +1135,7 @@ function TeamMembersTab() {
               <p>Select an employee to view details</p>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -1135,21 +1145,8 @@ function TeamMembersTab() {
           setShowAddForm(false);
           setAddingToBU(null);
           setAddingToManager(null);
-          setBuLevel('');
-          setBuL2Parent('');
-          setNewEmployee({
-            Employee_ID: '',
-            Name: '',
-            Name_AR: '',
-            Job_Title: '',
-            Job_Title_AR: '',
-            Email: '',
-            Hire_Date: '',
-            Reports_To: '',
-            Business_Unit_Code: ''
-          });
         }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content add-employee-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>
                 {addingToManager ? (
@@ -1160,29 +1157,11 @@ function TeamMembersTab() {
                   'Add New Employee'
                 )}
               </h3>
-              <button
-                className="modal-close"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setAddingToBU(null);
-                  setAddingToManager(null);
-                  setBuLevel('');
-                  setBuL2Parent('');
-                  setNewEmployee({
-                    Employee_ID: '',
-                    Name: '',
-                    Name_AR: '',
-                    Job_Title: '',
-                    Job_Title_AR: '',
-                    Email: '',
-                    Hire_Date: '',
-                    Reports_To: '',
-                    Business_Unit_Code: ''
-                  });
-                }}
-              >
-                ×
-              </button>
+              <button className="modal-close" onClick={() => {
+                setShowAddForm(false);
+                setAddingToBU(null);
+                setAddingToManager(null);
+              }}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-grid">
@@ -1242,55 +1221,16 @@ function TeamMembersTab() {
                     dir="rtl"
                   />
                 </div>
-                {/* Cascading Business Unit Selection */}
                 <div className="form-group">
-                  <label>Level *</label>
-                  <select
-                    value={buLevel}
-                    onChange={(e) => {
-                      setBuLevel(e.target.value);
-                      setBuL2Parent('');
-                      setNewEmployee({ ...newEmployee, Business_Unit_Code: '' });
-                    }}
-                  >
-                    <option value="">Select Level...</option>
-                    <option value="L1">L1 (Corporate)</option>
-                    <option value="L2">L2 (Division)</option>
-                    <option value="L3">L3 (Department)</option>
-                  </select>
-                </div>
-                {buLevel === 'L3' && (
-                  <div className="form-group">
-                    <label>Division (L2) *</label>
-                    <select
-                      value={buL2Parent}
-                      onChange={(e) => {
-                        setBuL2Parent(e.target.value);
-                        setNewEmployee({ ...newEmployee, Business_Unit_Code: '' });
-                      }}
-                    >
-                      <option value="">Select Division...</option>
-                      {l2BusinessUnits.map(bu => (
-                        <option key={bu.Code} value={bu.Code}>
-                          {bu.Name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="form-group">
-                  <label>{buLevel === 'L3' ? 'Department *' : 'Business Unit *'}</label>
+                  <label>Business Unit *</label>
                   <select
                     value={newEmployee.Business_Unit_Code}
                     onChange={(e) => setNewEmployee({ ...newEmployee, Business_Unit_Code: e.target.value })}
-                    disabled={buLevel === 'L3' && !buL2Parent}
                   >
-                    <option value="">
-                      {buLevel === 'L3' && !buL2Parent ? 'Select Division first...' : 'Select Business Unit...'}
-                    </option>
-                    {filteredBusinessUnits.map(bu => (
+                    <option value="">Select Business Unit...</option>
+                    {businessUnits.filter(bu => bu.Status === 'Active').map(bu => (
                       <option key={bu.Code} value={bu.Code}>
-                        {bu.Name}
+                        [{bu.Level}] {bu.Name}
                       </option>
                     ))}
                   </select>
@@ -1320,14 +1260,15 @@ function TeamMembersTab() {
               </div>
             </div>
             <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleAddEmployee}>
+                Add Employee
+              </button>
               <button
                 className="btn btn-ghost"
                 onClick={() => {
                   setShowAddForm(false);
                   setAddingToBU(null);
                   setAddingToManager(null);
-                  setBuLevel('');
-                  setBuL2Parent('');
                   setNewEmployee({
                     Employee_ID: '',
                     Name: '',
@@ -1342,9 +1283,6 @@ function TeamMembersTab() {
                 }}
               >
                 Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleAddEmployee}>
-                Add Employee
               </button>
             </div>
           </div>

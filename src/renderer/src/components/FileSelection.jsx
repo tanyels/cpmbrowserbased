@@ -1,8 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStrategy } from '../contexts/StrategyContext';
 import { useLicense } from '../contexts/LicenseContext';
-import { Target, FolderOpen, Sparkles, FileText, BarChart3, Crosshair, TrendingUp, Settings } from 'lucide-react';
+import {
+  Target, FolderOpen, Sparkles, FileText, BarChart3,
+  PenTool, TrendingUp, Settings, ChevronLeft, ChevronRight,
+  Play, Layout, Users, PieChart
+} from 'lucide-react';
+
+// Screenshot carousel data
+const screenshots = [
+  {
+    id: 1,
+    title: 'Strategy Map',
+    description: 'Visualize your entire strategy hierarchy from vision to KPIs',
+    icon: Layout
+  },
+  {
+    id: 2,
+    title: 'Interactive Dashboard',
+    description: 'Real-time performance tracking with customizable gauges and charts',
+    icon: PieChart
+  },
+  {
+    id: 3,
+    title: 'Organization View',
+    description: 'See your business units and team structure at a glance',
+    icon: Users
+  },
+  {
+    id: 4,
+    title: 'Scorecard Analytics',
+    description: 'Detailed KPI scorecards with trend analysis and achievements',
+    icon: TrendingUp
+  }
+];
 
 function FileSelection() {
   const navigate = useNavigate();
@@ -10,6 +42,8 @@ function FileSelection() {
   const { getCompanyInfo } = useLicense();
   const [lastFilePath, setLastFilePath] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
   const companyInfo = getCompanyInfo();
 
@@ -19,6 +53,30 @@ function FileSelection() {
       setLastFilePath(path);
     }
     getLastFile();
+  }, []);
+
+  // Auto-advance carousel
+  useEffect(() => {
+    if (!isAutoPlaying) return;
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % screenshots.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [isAutoPlaying]);
+
+  const nextSlide = useCallback(() => {
+    setCurrentSlide((prev) => (prev + 1) % screenshots.length);
+    setIsAutoPlaying(false);
+  }, []);
+
+  const prevSlide = useCallback(() => {
+    setCurrentSlide((prev) => (prev - 1 + screenshots.length) % screenshots.length);
+    setIsAutoPlaying(false);
+  }, []);
+
+  const goToSlide = useCallback((index) => {
+    setCurrentSlide(index);
+    setIsAutoPlaying(false);
   }, []);
 
   const handleOpenFile = async (filePath = null) => {
@@ -59,99 +117,136 @@ function FileSelection() {
     }
   };
 
+  const CurrentIcon = screenshots[currentSlide].icon;
+
   return (
-    <div className="file-selection">
-      {/* Company Branding */}
-      {companyInfo?.name ? (
-        <div className="file-selection-company">
-          {companyInfo.logo && (
-            <img
-              src={companyInfo.logo}
-              alt={companyInfo.name}
-              className="file-selection-company-logo"
-              onError={(e) => e.target.style.display = 'none'}
-            />
-          )}
-          <h1 className="file-selection-company-name">{companyInfo.name}</h1>
-          <p className="subtitle">Strategy Cascade & Performance Management</p>
-        </div>
-      ) : (
-        <>
-          <div className="file-selection-logo"><Target size={48} /></div>
-          <h1>CPM Strategy Cascade Tool</h1>
-          <p className="subtitle">Strategy-to-KPI Structuring Platform</p>
-        </>
-      )}
-      <p>Design, structure, and cascade strategy into measurable KPIs across L1, L2, and L3 levels</p>
-
-      {loadError && (
-        <div className="error-message">
-          {loadError}
-        </div>
-      )}
-
-      <div className="file-selection-actions">
-        {lastFilePath && (
-          <>
-            <div
-              className="last-file-card"
-              onClick={() => handleOpenFile(lastFilePath)}
-            >
-              <div className="last-file-label">Last Opened File</div>
-              <div className="last-file-path">{lastFilePath}</div>
-            </div>
-            <div className="divider">or</div>
-          </>
-        )}
-
-        <div className="button-group">
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={() => handleOpenFile()}
-            disabled={isLoading}
-          >
-            {isLoading ? (
+    <div className="landing-page">
+      {/* Hero Section */}
+      <section className="landing-hero">
+        <div className="hero-content">
+          <div className="hero-branding">
+            {companyInfo?.name ? (
               <>
-                <span className="spinner" style={{ width: 20, height: 20, marginBottom: 0 }}></span>
-                Loading...
+                {companyInfo.logo && (
+                  <img
+                    src={companyInfo.logo}
+                    alt={companyInfo.name}
+                    className="hero-logo"
+                    onError={(e) => e.target.style.display = 'none'}
+                  />
+                )}
+                <h1 className="hero-title">{companyInfo.name}</h1>
               </>
             ) : (
-              <><FolderOpen size={18} /> Open Existing File</>
+              <>
+                <div className="hero-icon"><Target size={56} /></div>
+                <h1 className="hero-title">CPM Strategy Cascade</h1>
+              </>
             )}
-          </button>
-
-          <button
-            className="btn btn-secondary btn-lg"
-            onClick={handleCreateNew}
-            disabled={isLoading}
-          >
-            <Sparkles size={18} /> Create New Strategy File
-          </button>
-
-          <button
-            className="btn btn-outline btn-lg"
-            onClick={handleGenerateSample}
-            disabled={isLoading}
-          >
-            <FileText size={18} /> Generate Sample File
-          </button>
-        </div>
-      </div>
-
-      <div className="file-selection-features">
-        <div className="features-grid">
-          <div className="feature-category">
-            <h3><BarChart3 size={20} className="feature-icon" /> Track & Visualize</h3>
-            <ul>
-              <li>Interactive Strategy Map</li>
-              <li>Organization Chart View</li>
-              <li>Strategy Cascade Visualization</li>
-              <li>Real-time Dashboard</li>
-            </ul>
+            <p className="hero-subtitle">Strategy-to-KPI Structuring Platform</p>
+            <p className="hero-description">
+              Design, structure, and cascade your organization's strategy into measurable KPIs across all business unit levels
+            </p>
           </div>
 
-          <div className="feature-category">
-            <h3><Crosshair size={20} className="feature-icon" /> Design & Structure</h3>
+          {loadError && (
+            <div className="landing-error">
+              {loadError}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="hero-actions">
+            {lastFilePath && (
+              <div
+                className="last-file-card"
+                onClick={() => handleOpenFile(lastFilePath)}
+              >
+                <div className="last-file-icon"><FileText size={20} /></div>
+                <div className="last-file-info">
+                  <span className="last-file-label">Continue where you left off</span>
+                  <span className="last-file-path">{lastFilePath.split('/').pop() || lastFilePath.split('\\').pop()}</span>
+                </div>
+                <ChevronRight size={20} className="last-file-arrow" />
+              </div>
+            )}
+
+            <div className="hero-buttons">
+              <button
+                className="btn-hero btn-hero-primary"
+                onClick={() => handleOpenFile()}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="spinner-small"></span>
+                    Loading...
+                  </>
+                ) : (
+                  <><FolderOpen size={20} /> Open File</>
+                )}
+              </button>
+
+              <button
+                className="btn-hero btn-hero-secondary"
+                onClick={handleCreateNew}
+                disabled={isLoading}
+              >
+                <Sparkles size={20} /> New Strategy
+              </button>
+
+              <button
+                className="btn-hero btn-hero-outline"
+                onClick={handleGenerateSample}
+                disabled={isLoading}
+              >
+                <Play size={20} /> Try Demo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Screenshot Carousel */}
+        <div className="hero-carousel">
+          <div className="carousel-container">
+            <div className="carousel-slide">
+              <div className="carousel-placeholder">
+                <CurrentIcon size={80} strokeWidth={1} />
+                <h3>{screenshots[currentSlide].title}</h3>
+                <p>{screenshots[currentSlide].description}</p>
+              </div>
+            </div>
+
+            <button className="carousel-btn carousel-btn-prev" onClick={prevSlide}>
+              <ChevronLeft size={24} />
+            </button>
+            <button className="carousel-btn carousel-btn-next" onClick={nextSlide}>
+              <ChevronRight size={24} />
+            </button>
+          </div>
+
+          <div className="carousel-dots">
+            {screenshots.map((_, index) => (
+              <button
+                key={index}
+                className={`carousel-dot ${index === currentSlide ? 'active' : ''}`}
+                onClick={() => goToSlide(index)}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="landing-features">
+        <h2 className="features-title">Everything you need to manage strategy</h2>
+
+        <div className="features-grid">
+          <div className="feature-card">
+            <div className="feature-card-header">
+              <div className="feature-card-icon"><PenTool size={24} /></div>
+              <h3>Design & Structure</h3>
+            </div>
             <ul>
               <li>Vision, Mission & Strategic Pillars</li>
               <li>Business Units (L1 → L2 → L3)</li>
@@ -160,30 +255,50 @@ function FileSelection() {
             </ul>
           </div>
 
-          <div className="feature-category">
-            <h3><TrendingUp size={20} className="feature-icon" /> Measure & Analyze</h3>
+          <div className="feature-card">
+            <div className="feature-card-header">
+              <div className="feature-card-icon"><BarChart3 size={24} /></div>
+              <h3>Track & Visualize</h3>
+            </div>
             <ul>
-              <li>Formula Builder for Measures</li>
-              <li>Monthly Data Entry</li>
-              <li>BU Scorecards with Gauges & Trends</li>
-              <li>Employee Scorecards & KPIs</li>
+              <li>Interactive Strategy Map</li>
+              <li>Organization Chart View</li>
+              <li>Strategy Cascade Visualization</li>
+              <li>Real-time Dashboard</li>
             </ul>
           </div>
 
-          <div className="feature-category">
-            <h3><Settings size={20} className="feature-icon" /> Configure</h3>
+          <div className="feature-card">
+            <div className="feature-card-header">
+              <div className="feature-card-icon"><TrendingUp size={24} /></div>
+              <h3>Measure & Analyze</h3>
+            </div>
             <ul>
-              <li>Configurable Achievement Thresholds</li>
+              <li>Formula Builder for Measures</li>
+              <li>Monthly Data Entry</li>
+              <li>BU Scorecards with Trends</li>
+              <li>Employee Scorecards</li>
+            </ul>
+          </div>
+
+          <div className="feature-card">
+            <div className="feature-card-header">
+              <div className="feature-card-icon"><Settings size={24} /></div>
+              <h3>Configure</h3>
+            </div>
+            <ul>
+              <li>Achievement Thresholds</li>
               <li>Custom Color Schemes</li>
-              <li>Single or Monthly Targets</li>
+              <li>Monthly Targets</li>
               <li>Overachievement Caps</li>
             </ul>
           </div>
         </div>
-      </div>
+      </section>
 
-      <footer className="file-selection-footer">
-        <p>© {new Date().getFullYear()} Cahit Ural Kukner. All rights reserved.</p>
+      {/* Footer */}
+      <footer className="landing-footer">
+        <p>© {new Date().getFullYear()} Transdata Bilgi Islem LTD STI. All rights reserved.</p>
       </footer>
     </div>
   );

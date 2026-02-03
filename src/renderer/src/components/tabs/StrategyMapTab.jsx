@@ -1,6 +1,162 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
 
+// Separate component for selected objective panel to handle local input state
+function SelectedObjectivePanel({
+  selectedObjective,
+  l1Objectives,
+  activePillars,
+  activePerspectives,
+  objectiveLinks,
+  getObjectiveDimensions,
+  objectivePositions,
+  setLocalPositions,
+  setMapPosition,
+  setSelectedObjective,
+  DEFAULT_OBJECTIVE_WIDTH,
+  DEFAULT_OBJECTIVE_HEIGHT,
+  MIN_OBJECTIVE_WIDTH,
+  MIN_OBJECTIVE_HEIGHT,
+  MAX_OBJECTIVE_WIDTH,
+  MAX_OBJECTIVE_HEIGHT
+}) {
+  const obj = l1Objectives.find(o => o.Code === selectedObjective);
+  const dims = getObjectiveDimensions(selectedObjective);
+  const pos = objectivePositions[selectedObjective] || { x: 0, y: 0 };
+
+  // Local state for input fields
+  const [widthInput, setWidthInput] = useState(dims.width.toString());
+  const [heightInput, setHeightInput] = useState(dims.height.toString());
+
+  // Update local state when dimensions change externally (e.g., from dragging)
+  useEffect(() => {
+    setWidthInput(dims.width.toString());
+    setHeightInput(dims.height.toString());
+  }, [dims.width, dims.height]);
+
+  if (!obj) return null;
+
+  const pillar = activePillars.find(p => p.Code === obj.Pillar_Code);
+  const perspective = activePerspectives.find(p => p.Code === obj.Perspective_Code);
+  const outgoingLinks = objectiveLinks.filter(l => l.From_Code === obj.Code);
+  const incomingLinks = objectiveLinks.filter(l => l.To_Code === obj.Code);
+
+  const applySize = (field, value) => {
+    const numValue = parseInt(value);
+    if (isNaN(numValue)) return;
+
+    const clampedValue = field === 'width'
+      ? Math.max(MIN_OBJECTIVE_WIDTH, Math.min(MAX_OBJECTIVE_WIDTH, numValue))
+      : Math.max(MIN_OBJECTIVE_HEIGHT, Math.min(MAX_OBJECTIVE_HEIGHT, numValue));
+
+    setLocalPositions(prev => ({
+      ...prev,
+      [obj.Code]: { ...prev[obj.Code], ...pos, width: field === 'width' ? clampedValue : dims.width, height: field === 'height' ? clampedValue : dims.height }
+    }));
+    setMapPosition(obj.Code, pos.x, pos.y,
+      field === 'width' ? clampedValue : dims.width,
+      field === 'height' ? clampedValue : dims.height
+    );
+
+    // Update input to show clamped value
+    if (field === 'width') setWidthInput(clampedValue.toString());
+    else setHeightInput(clampedValue.toString());
+  };
+
+  const handleKeyDown = (e, field) => {
+    if (e.key === 'Enter') {
+      applySize(field, field === 'width' ? widthInput : heightInput);
+      e.target.blur();
+    }
+  };
+
+  return (
+    <div className="selected-objective-panel">
+      <h4>Selected Objective</h4>
+      <div className="detail-row">
+        <span className="detail-label">Code:</span>
+        <span className="detail-value">{obj.Code}</span>
+      </div>
+      <div className="detail-row">
+        <span className="detail-label">Name:</span>
+        <span className="detail-value">{obj.Name}</span>
+      </div>
+      {pillar && (
+        <div className="detail-row">
+          <span className="detail-label">Pillar:</span>
+          <span className="detail-value">{pillar.Name}</span>
+        </div>
+      )}
+      {perspective && (
+        <div className="detail-row">
+          <span className="detail-label">Perspective:</span>
+          <span className="detail-value">{perspective.Name}</span>
+        </div>
+      )}
+      {outgoingLinks.length > 0 && (
+        <div className="detail-row">
+          <span className="detail-label">Leads to:</span>
+          <span className="detail-value">{outgoingLinks.map(l => l.To_Code).join(', ')}</span>
+        </div>
+      )}
+      {incomingLinks.length > 0 && (
+        <div className="detail-row">
+          <span className="detail-label">Led by:</span>
+          <span className="detail-value">{incomingLinks.map(l => l.From_Code).join(', ')}</span>
+        </div>
+      )}
+
+      <div className="size-controls">
+        <h5>Box Size</h5>
+        <div className="size-row">
+          <label>Width:</label>
+          <input
+            type="number"
+            value={widthInput}
+            min={MIN_OBJECTIVE_WIDTH}
+            max={MAX_OBJECTIVE_WIDTH}
+            onChange={(e) => setWidthInput(e.target.value)}
+            onBlur={() => applySize('width', widthInput)}
+            onKeyDown={(e) => handleKeyDown(e, 'width')}
+          />
+          <span>px</span>
+        </div>
+        <div className="size-row">
+          <label>Height:</label>
+          <input
+            type="number"
+            value={heightInput}
+            min={MIN_OBJECTIVE_HEIGHT}
+            max={MAX_OBJECTIVE_HEIGHT}
+            onChange={(e) => setHeightInput(e.target.value)}
+            onBlur={() => applySize('height', heightInput)}
+            onKeyDown={(e) => handleKeyDown(e, 'height')}
+          />
+          <span>px</span>
+        </div>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            setLocalPositions(prev => ({
+              ...prev,
+              [obj.Code]: { ...prev[obj.Code], ...pos, width: DEFAULT_OBJECTIVE_WIDTH, height: DEFAULT_OBJECTIVE_HEIGHT }
+            }));
+            setMapPosition(obj.Code, pos.x, pos.y, DEFAULT_OBJECTIVE_WIDTH, DEFAULT_OBJECTIVE_HEIGHT);
+            setWidthInput(DEFAULT_OBJECTIVE_WIDTH.toString());
+            setHeightInput(DEFAULT_OBJECTIVE_HEIGHT.toString());
+          }}
+        >
+          Reset to Default
+        </button>
+      </div>
+
+      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedObjective(null)}>
+        Deselect
+      </button>
+    </div>
+  );
+}
+
 function StrategyMapTab() {
   const {
     pillars,
@@ -62,10 +218,26 @@ function StrategyMapTab() {
     '#70AD47', '#9E480E', '#997300', '#264478', '#636363'
   ];
 
-  // Objective box dimensions
-  const OBJECTIVE_WIDTH = 160;
-  const OBJECTIVE_HEIGHT = 60;
+  // Objective box dimensions (defaults)
+  const DEFAULT_OBJECTIVE_WIDTH = 160;
+  const DEFAULT_OBJECTIVE_HEIGHT = 60;
+  const MIN_OBJECTIVE_WIDTH = 100;
+  const MIN_OBJECTIVE_HEIGHT = 40;
+  const MAX_OBJECTIVE_WIDTH = 400;
+  const MAX_OBJECTIVE_HEIGHT = 200;
   const ANCHOR_RADIUS = 8;
+
+  // Resizing state
+  const [resizing, setResizing] = useState(null);
+
+  // Get objective dimensions (from saved or default)
+  const getObjectiveDimensions = useCallback((code) => {
+    const pos = objectivePositions[code] || {};
+    return {
+      width: pos.width || DEFAULT_OBJECTIVE_WIDTH,
+      height: pos.height || DEFAULT_OBJECTIVE_HEIGHT
+    };
+  }, [objectivePositions]);
 
   // Get L1 strategic objectives
   const l1Objectives = useMemo(() => {
@@ -146,13 +318,14 @@ function StrategyMapTab() {
   // Get the 4 anchor points for an objective
   const getAnchorPoints = useCallback((code) => {
     const pos = objectivePositions[code] || { x: 0, y: 0 };
+    const dims = getObjectiveDimensions(code);
     return {
-      top: { x: pos.x + OBJECTIVE_WIDTH / 2, y: pos.y, side: 'top' },
-      right: { x: pos.x + OBJECTIVE_WIDTH, y: pos.y + OBJECTIVE_HEIGHT / 2, side: 'right' },
-      bottom: { x: pos.x + OBJECTIVE_WIDTH / 2, y: pos.y + OBJECTIVE_HEIGHT, side: 'bottom' },
-      left: { x: pos.x, y: pos.y + OBJECTIVE_HEIGHT / 2, side: 'left' }
+      top: { x: pos.x + dims.width / 2, y: pos.y, side: 'top' },
+      right: { x: pos.x + dims.width, y: pos.y + dims.height / 2, side: 'right' },
+      bottom: { x: pos.x + dims.width / 2, y: pos.y + dims.height, side: 'bottom' },
+      left: { x: pos.x, y: pos.y + dims.height / 2, side: 'left' }
     };
-  }, [objectivePositions]);
+  }, [objectivePositions, getObjectiveDimensions]);
 
   // Find the best anchor pair between two objectives
   const findBestAnchors = useCallback((fromCode, toCode, preferredFromSide = null, preferredToSide = null) => {
@@ -344,10 +517,11 @@ function StrategyMapTab() {
       if (obj.Code === excludeCode) return false;
       const pos = objectivePositions[obj.Code];
       if (!pos) return false;
-      return x >= pos.x - 10 && x <= pos.x + OBJECTIVE_WIDTH + 10 &&
-             y >= pos.y - 10 && y <= pos.y + OBJECTIVE_HEIGHT + 10;
+      const dims = getObjectiveDimensions(obj.Code);
+      return x >= pos.x - 10 && x <= pos.x + dims.width + 10 &&
+             y >= pos.y - 10 && y <= pos.y + dims.height + 10;
     });
-  }, [l1Objectives, objectivePositions]);
+  }, [l1Objectives, objectivePositions, getObjectiveDimensions]);
 
   // Find best anchor on target objective
   const findNearestAnchor = useCallback((targetCode, fromX, fromY) => {
@@ -383,6 +557,37 @@ function StrategyMapTab() {
         waypoints[waypointIndex] = { x: mouseX, y: mouseY };
         updateObjectiveLink(fromCode, toCode, { Waypoints: JSON.stringify(waypoints) });
       }
+    } else if (resizing) {
+      // Resizing an objective
+      const pos = objectivePositions[resizing.code] || { x: 0, y: 0 };
+      const dims = getObjectiveDimensions(resizing.code);
+
+      let newWidth = dims.width;
+      let newHeight = dims.height;
+      let newX = pos.x;
+      let newY = pos.y;
+
+      if (resizing.handle.includes('e')) {
+        newWidth = Math.max(MIN_OBJECTIVE_WIDTH, Math.min(MAX_OBJECTIVE_WIDTH, mouseX - pos.x));
+      }
+      if (resizing.handle.includes('w')) {
+        const deltaX = mouseX - resizing.startX;
+        newWidth = Math.max(MIN_OBJECTIVE_WIDTH, Math.min(MAX_OBJECTIVE_WIDTH, resizing.startWidth - deltaX));
+        newX = resizing.startPosX + (resizing.startWidth - newWidth);
+      }
+      if (resizing.handle.includes('s')) {
+        newHeight = Math.max(MIN_OBJECTIVE_HEIGHT, Math.min(MAX_OBJECTIVE_HEIGHT, mouseY - pos.y));
+      }
+      if (resizing.handle.includes('n')) {
+        const deltaY = mouseY - resizing.startY;
+        newHeight = Math.max(MIN_OBJECTIVE_HEIGHT, Math.min(MAX_OBJECTIVE_HEIGHT, resizing.startHeight - deltaY));
+        newY = resizing.startPosY + (resizing.startHeight - newHeight);
+      }
+
+      setLocalPositions(prev => ({
+        ...prev,
+        [resizing.code]: { ...prev[resizing.code], x: newX, y: newY, width: newWidth, height: newHeight }
+      }));
     } else if (isLinking && linkSource) {
       // Creating a new link - use MOUSE position for finding nearest anchor on target
       const hoverObj = findObjectiveAtPosition(mouseX, mouseY, linkSource.code);
@@ -406,21 +611,29 @@ function StrategyMapTab() {
       }
     } else if (dragging) {
       // Dragging an objective - update local state for smooth dragging
-      const x = Math.max(0, Math.min(mouseX - dragging.offsetX, canvasSize.width - OBJECTIVE_WIDTH));
-      const y = Math.max(gridConfig.headerHeight, Math.min(mouseY - dragging.offsetY, canvasSize.height - OBJECTIVE_HEIGHT));
+      const dims = getObjectiveDimensions(dragging.code);
+      const x = Math.max(0, Math.min(mouseX - dragging.offsetX, canvasSize.width - dims.width));
+      const y = Math.max(gridConfig.headerHeight, Math.min(mouseY - dragging.offsetY, canvasSize.height - dims.height));
 
       setLocalPositions(prev => ({
         ...prev,
-        [dragging.code]: { x, y }
+        [dragging.code]: { ...prev[dragging.code], x, y }
       }));
     }
-  }, [dragging, draggingWaypoint, isLinking, linkSource, canvasSize, gridConfig.headerHeight,
-      findObjectiveAtPosition, findNearestAnchor, objectiveLinks, updateObjectiveLink]);
+  }, [dragging, draggingWaypoint, resizing, isLinking, linkSource, canvasSize, gridConfig.headerHeight,
+      findObjectiveAtPosition, findNearestAnchor, objectiveLinks, updateObjectiveLink, objectivePositions, getObjectiveDimensions]);
 
   // Handle mouse up
   const handleMouseUp = useCallback((e) => {
     if (draggingWaypoint) {
       setDraggingWaypoint(null);
+    } else if (resizing) {
+      // Save the final size and position to context
+      const pos = localPositions[resizing.code];
+      if (pos) {
+        setMapPosition(resizing.code, pos.x, pos.y, pos.width, pos.height);
+      }
+      setResizing(null);
     } else if (isLinking && linkSource && tempLinkEnd?.targetCode) {
       // Create the link with side information
       addObjectiveLink(
@@ -440,11 +653,11 @@ function StrategyMapTab() {
       // Save the final position to context (marks file as changed)
       const pos = localPositions[dragging.code];
       if (pos) {
-        setMapPosition(dragging.code, pos.x, pos.y);
+        setMapPosition(dragging.code, pos.x, pos.y, pos.width, pos.height);
       }
     }
     setDragging(null);
-  }, [isLinking, linkSource, tempLinkEnd, draggingWaypoint, dragging, localPositions, addObjectiveLink, setMapPosition]);
+  }, [isLinking, linkSource, tempLinkEnd, draggingWaypoint, dragging, resizing, localPositions, addObjectiveLink, setMapPosition]);
 
   // Handle double-click on path to add waypoint
   const handlePathDoubleClick = (e, fromCode, toCode) => {
@@ -500,7 +713,7 @@ function StrategyMapTab() {
 
   // Add/remove event listeners
   useEffect(() => {
-    if (dragging || isLinking || draggingWaypoint) {
+    if (dragging || isLinking || draggingWaypoint || resizing) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
@@ -508,7 +721,7 @@ function StrategyMapTab() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, isLinking, draggingWaypoint, handleMouseMove, handleMouseUp]);
+  }, [dragging, isLinking, draggingWaypoint, resizing, handleMouseMove, handleMouseUp]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -789,20 +1002,39 @@ function StrategyMapTab() {
           <div className="objectives-layer">
             {l1Objectives.map((obj) => {
               const pos = objectivePositions[obj.Code] || { x: 50, y: 100 };
+              const dims = getObjectiveDimensions(obj.Code);
               const isSelected = selectedObjective === obj.Code;
               const isDragging = dragging?.code === obj.Code;
+              const isResizing = resizing?.code === obj.Code;
               const isLinkSourceObj = linkSource?.code === obj.Code;
               const isLinkTarget = tempLinkEnd?.targetCode === obj.Code;
+
+              // Handle resize start
+              const handleResizeMouseDown = (e, handle) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const rect = canvasRef.current.getBoundingClientRect();
+                setResizing({
+                  code: obj.Code,
+                  handle,
+                  startX: e.clientX - rect.left,
+                  startY: e.clientY - rect.top,
+                  startWidth: dims.width,
+                  startHeight: dims.height,
+                  startPosX: pos.x,
+                  startPosY: pos.y
+                });
+              };
 
               return (
                 <div
                   key={obj.Code}
-                  className={`map-objective ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isLinkSourceObj ? 'link-source' : ''} ${isLinkTarget ? 'link-target' : ''}`}
+                  className={`map-objective ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isResizing ? 'resizing' : ''} ${isLinkSourceObj ? 'link-source' : ''} ${isLinkTarget ? 'link-target' : ''}`}
                   style={{
                     left: pos.x,
                     top: pos.y,
-                    width: OBJECTIVE_WIDTH,
-                    height: OBJECTIVE_HEIGHT,
+                    width: dims.width,
+                    height: dims.height,
                     borderColor: getPillarColor(obj.Pillar_Code, 0)
                   }}
                   onMouseDown={(e) => handleObjectiveMouseDown(e, obj)}
@@ -820,10 +1052,22 @@ function StrategyMapTab() {
                   />
                   <div className="objective-content">
                     <span className="objective-code">{obj.Code}</span>
-                    <span className="objective-name">{obj.Name}</span>
+                    <span className="objective-name" title={obj.Name}>{obj.Name}</span>
                     {obj.Weight > 0 && (
                       <span className="objective-weight">{obj.Weight}%</span>
                     )}
+                  </div>
+
+                  {/* Resize handles - show on hover/selected */}
+                  <div className="resize-handles">
+                    <div className="resize-handle resize-n" onMouseDown={(e) => handleResizeMouseDown(e, 'n')} />
+                    <div className="resize-handle resize-e" onMouseDown={(e) => handleResizeMouseDown(e, 'e')} />
+                    <div className="resize-handle resize-s" onMouseDown={(e) => handleResizeMouseDown(e, 's')} />
+                    <div className="resize-handle resize-w" onMouseDown={(e) => handleResizeMouseDown(e, 'w')} />
+                    <div className="resize-handle resize-ne" onMouseDown={(e) => handleResizeMouseDown(e, 'ne')} />
+                    <div className="resize-handle resize-se" onMouseDown={(e) => handleResizeMouseDown(e, 'se')} />
+                    <div className="resize-handle resize-sw" onMouseDown={(e) => handleResizeMouseDown(e, 'sw')} />
+                    <div className="resize-handle resize-nw" onMouseDown={(e) => handleResizeMouseDown(e, 'nw')} />
                   </div>
 
                   {/* Anchor points - all 4 sides */}
@@ -833,15 +1077,15 @@ function StrategyMapTab() {
                       position: 'absolute',
                       top: -ANCHOR_RADIUS,
                       left: -ANCHOR_RADIUS,
-                      width: OBJECTIVE_WIDTH + ANCHOR_RADIUS * 2,
-                      height: OBJECTIVE_HEIGHT + ANCHOR_RADIUS * 2,
+                      width: dims.width + ANCHOR_RADIUS * 2,
+                      height: dims.height + ANCHOR_RADIUS * 2,
                       pointerEvents: 'none',
                       overflow: 'visible'
                     }}
                   >
                     {/* Top anchor */}
                     <circle
-                      cx={OBJECTIVE_WIDTH / 2 + ANCHOR_RADIUS}
+                      cx={dims.width / 2 + ANCHOR_RADIUS}
                       cy={ANCHOR_RADIUS}
                       r={ANCHOR_RADIUS}
                       className="anchor-point"
@@ -850,8 +1094,8 @@ function StrategyMapTab() {
                     />
                     {/* Right anchor */}
                     <circle
-                      cx={OBJECTIVE_WIDTH + ANCHOR_RADIUS}
-                      cy={OBJECTIVE_HEIGHT / 2 + ANCHOR_RADIUS}
+                      cx={dims.width + ANCHOR_RADIUS}
+                      cy={dims.height / 2 + ANCHOR_RADIUS}
                       r={ANCHOR_RADIUS}
                       className="anchor-point"
                       style={{ pointerEvents: 'auto' }}
@@ -859,8 +1103,8 @@ function StrategyMapTab() {
                     />
                     {/* Bottom anchor */}
                     <circle
-                      cx={OBJECTIVE_WIDTH / 2 + ANCHOR_RADIUS}
-                      cy={OBJECTIVE_HEIGHT + ANCHOR_RADIUS}
+                      cx={dims.width / 2 + ANCHOR_RADIUS}
+                      cy={dims.height + ANCHOR_RADIUS}
                       r={ANCHOR_RADIUS}
                       className="anchor-point"
                       style={{ pointerEvents: 'auto' }}
@@ -869,7 +1113,7 @@ function StrategyMapTab() {
                     {/* Left anchor */}
                     <circle
                       cx={ANCHOR_RADIUS}
-                      cy={OBJECTIVE_HEIGHT / 2 + ANCHOR_RADIUS}
+                      cy={dims.height / 2 + ANCHOR_RADIUS}
                       r={ANCHOR_RADIUS}
                       className="anchor-point"
                       style={{ pointerEvents: 'auto' }}
@@ -946,57 +1190,24 @@ function StrategyMapTab() {
 
       {/* Selected Objective Panel */}
       {selectedObjective && !selectedLink && (
-        <div className="selected-objective-panel">
-          {(() => {
-            const obj = l1Objectives.find(o => o.Code === selectedObjective);
-            if (!obj) return null;
-            const pillar = activePillars.find(p => p.Code === obj.Pillar_Code);
-            const perspective = activePerspectives.find(p => p.Code === obj.Perspective_Code);
-            const outgoingLinks = objectiveLinks.filter(l => l.From_Code === obj.Code);
-            const incomingLinks = objectiveLinks.filter(l => l.To_Code === obj.Code);
-
-            return (
-              <>
-                <h4>Selected Objective</h4>
-                <div className="detail-row">
-                  <span className="detail-label">Code:</span>
-                  <span className="detail-value">{obj.Code}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Name:</span>
-                  <span className="detail-value">{obj.Name}</span>
-                </div>
-                {pillar && (
-                  <div className="detail-row">
-                    <span className="detail-label">Pillar:</span>
-                    <span className="detail-value">{pillar.Name}</span>
-                  </div>
-                )}
-                {perspective && (
-                  <div className="detail-row">
-                    <span className="detail-label">Perspective:</span>
-                    <span className="detail-value">{perspective.Name}</span>
-                  </div>
-                )}
-                {outgoingLinks.length > 0 && (
-                  <div className="detail-row">
-                    <span className="detail-label">Leads to:</span>
-                    <span className="detail-value">{outgoingLinks.map(l => l.To_Code).join(', ')}</span>
-                  </div>
-                )}
-                {incomingLinks.length > 0 && (
-                  <div className="detail-row">
-                    <span className="detail-label">Led by:</span>
-                    <span className="detail-value">{incomingLinks.map(l => l.From_Code).join(', ')}</span>
-                  </div>
-                )}
-                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedObjective(null)}>
-                  Deselect
-                </button>
-              </>
-            );
-          })()}
-        </div>
+        <SelectedObjectivePanel
+          selectedObjective={selectedObjective}
+          l1Objectives={l1Objectives}
+          activePillars={activePillars}
+          activePerspectives={activePerspectives}
+          objectiveLinks={objectiveLinks}
+          getObjectiveDimensions={getObjectiveDimensions}
+          objectivePositions={objectivePositions}
+          setLocalPositions={setLocalPositions}
+          setMapPosition={setMapPosition}
+          setSelectedObjective={setSelectedObjective}
+          DEFAULT_OBJECTIVE_WIDTH={DEFAULT_OBJECTIVE_WIDTH}
+          DEFAULT_OBJECTIVE_HEIGHT={DEFAULT_OBJECTIVE_HEIGHT}
+          MIN_OBJECTIVE_WIDTH={MIN_OBJECTIVE_WIDTH}
+          MIN_OBJECTIVE_HEIGHT={MIN_OBJECTIVE_HEIGHT}
+          MAX_OBJECTIVE_WIDTH={MAX_OBJECTIVE_WIDTH}
+          MAX_OBJECTIVE_HEIGHT={MAX_OBJECTIVE_HEIGHT}
+        />
       )}
 
       {/* Color Picker Panel */}

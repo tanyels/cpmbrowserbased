@@ -749,11 +749,19 @@ export const StrategyProvider = ({ children }) => {
   // MAP POSITIONS
   // ============================================
 
-  const setMapPosition = useCallback((objectiveCode, x, y) => {
-    setMapPositionsState(prev => ({
-      ...prev,
-      [objectiveCode]: { x, y }
-    }));
+  const setMapPosition = useCallback((objectiveCode, x, y, width = null, height = null) => {
+    setMapPositionsState(prev => {
+      const existing = prev[objectiveCode] || {};
+      return {
+        ...prev,
+        [objectiveCode]: {
+          x,
+          y,
+          width: width !== null ? width : existing.width,
+          height: height !== null ? height : existing.height
+        }
+      };
+    });
     setHasUnsavedChanges(true);
   }, []);
 

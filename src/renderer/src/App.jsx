@@ -56,7 +56,7 @@ function AppContent() {
       </Routes>
 
       <footer className="app-footer">
-        Built by Lamosa L.L.C. - FZ
+        Built by Transdata Bilgi Islem LTD STI
       </footer>
     </div>
   );

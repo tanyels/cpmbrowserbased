@@ -375,7 +375,7 @@ ipcMain.handle('read-strategy-file', async (event, filePath) => {
       }));
     }
 
-    // Read Map Layout (objective positions)
+    // Read Map Layout (objective positions and sizes)
     const mapLayoutSheet = workbook.getWorksheet('Map_Layout');
     if (mapLayoutSheet) {
       const mapData = readSheetData(mapLayoutSheet);
@@ -384,7 +384,9 @@ ipcMain.handle('read-strategy-file', async (event, filePath) => {
         if (row.Objective_Code) {
           data.mapPositions[row.Objective_Code] = {
             x: parseFloat(row.X) || 0,
-            y: parseFloat(row.Y) || 0
+            y: parseFloat(row.Y) || 0,
+            width: row.Width ? parseFloat(row.Width) : undefined,
+            height: row.Height ? parseFloat(row.Height) : undefined
           };
         }
       });
@@ -726,13 +728,15 @@ ipcMain.handle('save-strategy-file', async (event, { filePath, data }) => {
     // Objective Links sheet
     createSheet('Objective_Links', data.objectiveLinks || [], ['From_Code', 'To_Code', 'From_Side', 'To_Side', 'Waypoints']);
 
-    // Map Layout sheet (objective positions)
+    // Map Layout sheet (objective positions and sizes)
     const mapLayoutData = Object.entries(data.mapPositions || {}).map(([code, pos]) => ({
       Objective_Code: code,
       X: pos.x,
-      Y: pos.y
+      Y: pos.y,
+      Width: pos.width || '',
+      Height: pos.height || ''
     }));
-    createSheet('Map_Layout', mapLayoutData, ['Objective_Code', 'X', 'Y']);
+    createSheet('Map_Layout', mapLayoutData, ['Objective_Code', 'X', 'Y', 'Width', 'Height']);
 
     // Global Values sheet
     const globalValuesForExcel = (data.globalValues || []).map(gv => ({
