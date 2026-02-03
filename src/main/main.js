@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const Store = require('electron-store');
 const ExcelJS = require('exceljs');
 const { licenseService, LICENSE_STATE, LICENSE_CONFIG } = require('./licenseService');
@@ -160,6 +161,54 @@ function createOperationalObjectives(businessUnits) {
 }
 
 // ============================================
+// ENCRYPTION HELPERS (AES-256-GCM)
+// ============================================
+
+// Derive encryption key from license (licenseKey + companyName)
+function getEncryptionKey() {
+  const data = licenseService.getLicenseData();
+  if (!data.licenseKey || !data.companyName) {
+    throw new Error('Valid license required for encrypted files');
+  }
+  return crypto.createHash('sha256')
+    .update(`${data.licenseKey}:${data.companyName}`)
+    .digest();
+}
+
+// Encrypt buffer using AES-256-GCM
+function encryptBuffer(buffer) {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12); // GCM standard IV size
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+  const encrypted = Buffer.concat([
+    cipher.update(buffer),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  // Format: IV (12 bytes) + AuthTag (16 bytes) + Ciphertext
+  return Buffer.concat([iv, authTag, encrypted]);
+}
+
+// Decrypt buffer using AES-256-GCM
+function decryptBuffer(encryptedData) {
+  const key = getEncryptionKey();
+
+  const iv = encryptedData.slice(0, 12);
+  const authTag = encryptedData.slice(12, 28);
+  const ciphertext = encryptedData.slice(28);
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+
+  return Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final()
+  ]);
+}
+
+// ============================================
 // IPC HANDLERS - FILE OPERATIONS
 // ============================================
 
@@ -180,6 +229,8 @@ ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [
+      { name: 'CPM Files', extensions: ['cpme', 'xlsx', 'xls', 'xlsm'] },
+      { name: 'Encrypted CPM Files', extensions: ['cpme'] },
       { name: 'Excel Files', extensions: ['xlsx', 'xls', 'xlsm'] }
     ]
   });
@@ -190,16 +241,78 @@ ipcMain.handle('open-file-dialog', async () => {
   return null;
 });
 
-ipcMain.handle('save-file-dialog', async (event, defaultName) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    defaultPath: defaultName,
-    filters: [
-      { name: 'Excel Files', extensions: ['xlsx'] }
-    ]
-  });
+ipcMain.handle('save-file-dialog', async (event, options) => {
+  // Support both old string format and new object format
+  // Old: saveFileDialog('filename')
+  // New: saveFileDialog({ name: 'filename', type: 'xlsx' }) for xlsx-only dialogs
+  let defaultName, preferXlsx;
+  if (typeof options === 'object' && options !== null) {
+    defaultName = options.name;
+    preferXlsx = options.type === 'xlsx';
+  } else {
+    defaultName = options;
+    preferXlsx = false;
+  }
+
+  // Strip any existing extension
+  let baseName = defaultName || 'Strategy_Cascade';
+  baseName = baseName.replace(/\.(xlsx|xls|xlsm|cpme)$/i, '');
+
+  let dialogOptions;
+  if (preferXlsx) {
+    // Excel-only dialog (for exports like KPI cards)
+    dialogOptions = {
+      defaultPath: baseName + '.xlsx',
+      filters: [
+        { name: 'Excel Files', extensions: ['xlsx'] }
+      ]
+    };
+  } else {
+    // Default: encrypted file dialog with both options
+    dialogOptions = {
+      defaultPath: baseName + '.cpme',
+      filters: [
+        { name: 'Encrypted CPM File', extensions: ['cpme'] },
+        { name: 'Excel File (Unencrypted)', extensions: ['xlsx'] }
+      ]
+    };
+  }
+
+  const result = await dialog.showSaveDialog(mainWindow, dialogOptions);
 
   if (!result.canceled) {
-    return result.filePath;
+    let filePath = result.filePath;
+
+    // Normalize extension handling for cross-platform compatibility
+    // Windows and macOS handle filter extensions differently
+
+    // First, clean up any double/multiple extensions
+    // e.g., "file.cpme.xlsx" -> "file.xlsx", "file.cpme.cpme" -> "file.cpme"
+    const multiExtRegex = /(\.(xlsx|xls|xlsm|cpme))+$/i;
+    const extMatches = filePath.match(multiExtRegex);
+
+    if (extMatches) {
+      // Get all extensions found
+      const allExts = extMatches[0].toLowerCase();
+      // Get the base path without any of these extensions
+      const basePathClean = filePath.slice(0, -extMatches[0].length);
+
+      // Determine final extension based on what's present and preference
+      let finalExt;
+      if (allExts.includes('.xlsx') || allExts.includes('.xls') || allExts.includes('.xlsm')) {
+        // User selected xlsx filter at some point
+        finalExt = '.xlsx';
+      } else {
+        finalExt = '.cpme';
+      }
+
+      filePath = basePathClean + finalExt;
+    } else {
+      // No recognized extension - add default
+      filePath = filePath + (preferXlsx ? '.xlsx' : '.cpme');
+    }
+
+    return filePath;
   }
   return null;
 });
@@ -213,7 +326,32 @@ ipcMain.handle('read-strategy-file', async (event, filePath) => {
     console.log('=== MAIN PROCESS READ CALLED ===');
     console.log('MAIN READ - filePath:', filePath);
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(filePath);
+
+    if (filePath.endsWith('.cpme')) {
+      // Encrypted file - decrypt first
+      console.log('MAIN READ - Decrypting encrypted .cpme file');
+      try {
+        const encryptedData = fs.readFileSync(filePath);
+        const decryptedBuffer = decryptBuffer(encryptedData);
+        await workbook.xlsx.load(decryptedBuffer);
+      } catch (decryptError) {
+        console.error('Decryption error:', decryptError);
+        // Handle decryption errors (wrong license)
+        if (decryptError.message.includes('Unsupported state') ||
+            decryptError.message.includes('auth tag') ||
+            decryptError.message.includes('Invalid') ||
+            decryptError.message.includes('Valid license required')) {
+          return {
+            success: false,
+            error: 'Cannot decrypt file. This file was created with a different license or your license is not active.'
+          };
+        }
+        throw decryptError;
+      }
+    } else {
+      // Plain Excel file
+      await workbook.xlsx.readFile(filePath);
+    }
     console.log('MAIN READ - workbook loaded, sheets:', workbook.worksheets.map(ws => ws.name));
 
     // Initialize data structure
@@ -867,7 +1005,26 @@ ipcMain.handle('save-strategy-file', async (event, { filePath, data }) => {
     createSheet('BU_Scorecard_Config', buScorecardConfigData, ['BU_Code', 'Parent_Objective_Code', 'Weight']);
 
     console.log('MAIN SAVE - Writing file to:', filePath);
-    await workbook.xlsx.writeFile(filePath);
+
+    if (filePath.endsWith('.cpme')) {
+      // Encrypt and save
+      console.log('MAIN SAVE - Encrypting file as .cpme');
+      try {
+        const buffer = await workbook.xlsx.writeBuffer();
+        const encryptedBuffer = encryptBuffer(buffer);
+        fs.writeFileSync(filePath, encryptedBuffer);
+      } catch (encryptError) {
+        console.error('Encryption error:', encryptError);
+        if (encryptError.message.includes('Valid license required')) {
+          return { success: false, error: 'Valid license required to save encrypted files. Please activate your license.' };
+        }
+        throw encryptError;
+      }
+    } else {
+      // Save as plain Excel
+      await workbook.xlsx.writeFile(filePath);
+    }
+
     console.log('MAIN SAVE - File written successfully');
     return { success: true };
   } catch (error) {
@@ -1405,6 +1562,248 @@ ipcMain.handle('export-strategy-report', async (event, { filePath, data }) => {
     return { success: true };
   } catch (error) {
     console.error('Error exporting strategy report:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================
+// IPC HANDLER - EXPORT UNENCRYPTED
+// ============================================
+
+ipcMain.handle('export-unencrypted', async (event, { data, defaultName }) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName || 'Strategy_Export.xlsx',
+      filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
+    });
+
+    if (result.canceled) {
+      return { success: false, cancelled: true };
+    }
+
+    // Create a fresh workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'CPM Strategy Cascade Tool';
+    workbook.created = new Date();
+
+    // Helper function to create a fresh sheet with data
+    const createSheet = (name, sheetData, headers) => {
+      const sheet = workbook.addWorksheet(name);
+
+      // Write headers as first row
+      const headerRow = sheet.addRow(headers);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+
+      // Write data rows
+      sheetData.forEach(item => {
+        const rowValues = headers.map(h => item[h] ?? '');
+        sheet.addRow(rowValues);
+      });
+
+      // Auto-width columns
+      headers.forEach((_, index) => {
+        sheet.getColumn(index + 1).width = 20;
+      });
+
+      return sheet;
+    };
+
+    // Vision sheet
+    const visionData = typeof data.vision === 'object'
+      ? [{ Statement: data.vision.Statement || '', Statement_AR: data.vision.Statement_AR || '', Year: new Date().getFullYear() }]
+      : [{ Statement: data.vision || '', Statement_AR: '', Year: new Date().getFullYear() }];
+    createSheet('Vision', visionData, ['Statement', 'Statement_AR', 'Year']);
+
+    // Mission sheet
+    const missionData = typeof data.mission === 'object'
+      ? [{ Statement: data.mission.Statement || '', Statement_AR: data.mission.Statement_AR || '', Year: new Date().getFullYear() }]
+      : [{ Statement: data.mission || '', Statement_AR: '', Year: new Date().getFullYear() }];
+    createSheet('Mission', missionData, ['Statement', 'Statement_AR', 'Year']);
+
+    // Strategic Pillars sheet
+    createSheet('Strategic_Pillars', data.pillars || [], ['Code', 'Name', 'Name_AR', 'Description', 'Weight', 'Status', 'Color']);
+
+    // Perspectives sheet
+    createSheet('Perspectives', data.perspectives || [], ['Code', 'Name', 'Name_AR', 'Status']);
+
+    // Business Units sheet
+    createSheet('Business_Units', data.businessUnits || [], ['Code', 'Name', 'Name_AR', 'Abbreviation', 'Level', 'Parent_Code', 'Status']);
+
+    // Objectives sheet
+    const objectivesForExcel = (data.objectives || []).map(obj => ({
+      ...obj,
+      Business_Unit: obj.Business_Unit_Code || obj.Business_Unit || '',
+      Parent_Objective: obj.Parent_Objective_Code || obj.Parent_Objective || '',
+      Perspective: obj.Perspective_Code || obj.Perspective || ''
+    }));
+    createSheet('Objectives', objectivesForExcel, [
+      'Code', 'Name', 'Name_AR', 'Description', 'Level', 'Business_Unit',
+      'Parent_Objective', 'Pillar_Code', 'Perspective', 'Weight', 'Status', 'Is_Operational'
+    ]);
+
+    // KPIs sheet
+    const kpisForExcel = (data.kpis || []).map(kpi => {
+      const objective = (data.objectives || []).find(obj => obj.Code === kpi.Objective_Code);
+      return {
+        ...kpi,
+        Level: objective?.Level || kpi.Level || '',
+        Business_Unit: kpi.Business_Unit_Code || kpi.Business_Unit || '',
+        Monthly_Targets: JSON.stringify(kpi.Monthly_Targets || {})
+      };
+    });
+    createSheet('KPIs', kpisForExcel, [
+      'Code', 'Name', 'Name_AR', 'Description', 'Description_AR', 'Level', 'Objective_Code', 'Business_Unit',
+      'Impact_Type', 'Indicator_Type', 'Approval_Status', 'Formula', 'Data_Points', 'Target', 'Target_Mode', 'Monthly_Targets', 'Unit', 'Weight', 'Status', 'Review_Status', 'Discussion', 'Polarity'
+    ]);
+
+    // Objective Links sheet
+    createSheet('Objective_Links', data.objectiveLinks || [], ['From_Code', 'To_Code', 'From_Side', 'To_Side', 'Waypoints']);
+
+    // Map Layout sheet
+    const mapLayoutData = Object.entries(data.mapPositions || {}).map(([code, pos]) => ({
+      Objective_Code: code,
+      X: pos.x,
+      Y: pos.y,
+      Width: pos.width || '',
+      Height: pos.height || ''
+    }));
+    createSheet('Map_Layout', mapLayoutData, ['Objective_Code', 'X', 'Y', 'Width', 'Height']);
+
+    // Global Values sheet
+    const globalValuesForExcel = (data.globalValues || []).map(gv => ({
+      ...gv,
+      Monthly_Values: JSON.stringify(gv.Monthly_Values || {})
+    }));
+    createSheet('Global_Values', globalValuesForExcel, ['Code', 'Name', 'Name_AR', 'Type', 'Description', 'Monthly_Values']);
+
+    // Measures sheet
+    const measuresForExcel = (data.measures || []).map(m => ({
+      ...m,
+      Formula_Elements: JSON.stringify(m.Formula_Elements || []),
+      Parameters: JSON.stringify(m.Parameters || [])
+    }));
+    createSheet('Measures', measuresForExcel, ['Code', 'Name', 'KPI_Code', 'Formula_Elements', 'Formula_Text', 'Parameters', 'Last_Value', 'Last_Calculated', 'Status', 'Created_At']);
+
+    // Parameter Values sheet
+    const parameterValuesData = [];
+    Object.entries(data.parameterValues || {}).forEach(([measureCode, params]) => {
+      Object.entries(params || {}).forEach(([paramName, months]) => {
+        Object.entries(months || {}).forEach(([monthKey, value]) => {
+          if (value !== null && value !== undefined) {
+            parameterValuesData.push({
+              Measure_Code: measureCode,
+              Parameter_Name: paramName,
+              Month_Key: monthKey,
+              Value: value
+            });
+          }
+        });
+      });
+    });
+    createSheet('Parameter_Values', parameterValuesData, ['Measure_Code', 'Parameter_Name', 'Month_Key', 'Value']);
+
+    // Calculated Values sheet
+    const calculatedValuesData = [];
+    Object.entries(data.calculatedValues || {}).forEach(([measureCode, months]) => {
+      Object.entries(months || {}).forEach(([monthKey, result]) => {
+        if (result && result.value !== null && result.value !== undefined) {
+          calculatedValuesData.push({
+            Measure_Code: measureCode,
+            Month_Key: monthKey,
+            Value: result.value,
+            Error: result.error || ''
+          });
+        }
+      });
+    });
+    createSheet('Calculated_Values', calculatedValuesData, ['Measure_Code', 'Month_Key', 'Value', 'Error']);
+
+    // Achievements sheet
+    const achievementsData = [];
+    Object.entries(data.achievements || {}).forEach(([measureCode, months]) => {
+      Object.entries(months || {}).forEach(([monthKey, value]) => {
+        if (value !== null && value !== undefined) {
+          achievementsData.push({
+            Measure_Code: measureCode,
+            Month_Key: monthKey,
+            Achievement: value
+          });
+        }
+      });
+    });
+    createSheet('Achievements', achievementsData, ['Measure_Code', 'Month_Key', 'Achievement']);
+
+    // Team Members sheet
+    createSheet('Team_Members', data.teamMembers || [], [
+      'Code', 'Employee_ID', 'Name', 'Name_AR', 'Job_Title', 'Job_Title_AR',
+      'Email', 'Photo_URL', 'Hire_Date', 'Reports_To', 'Business_Unit_Code', 'Status'
+    ]);
+
+    // Personal Objectives sheet
+    createSheet('Personal_Objectives', data.personalObjectives || [], [
+      'Code', 'Name', 'Name_AR', 'Description', 'Employee_Code',
+      'Parent_Objective_Code', 'Weight', 'Target_Date', 'Status'
+    ]);
+
+    // Employee KPIs sheet
+    const employeeKpisForExcel = (data.employeeKpis || []).map(kpi => ({
+      ...kpi,
+      Monthly_Targets: JSON.stringify(kpi.Monthly_Targets || {})
+    }));
+    createSheet('Employee_KPIs', employeeKpisForExcel, [
+      'Code', 'Name', 'Name_AR', 'Description', 'Employee_Code', 'Personal_Objective_Code',
+      'Formula', 'Data_Points', 'Target', 'Target_Mode', 'Monthly_Targets', 'Unit', 'Weight', 'Polarity', 'Status'
+    ]);
+
+    // Employee Achievements sheet
+    const employeeAchievementsData = [];
+    Object.entries(data.employeeAchievements || {}).forEach(([kpiCode, months]) => {
+      Object.entries(months || {}).forEach(([monthKey, value]) => {
+        if (value !== null && value !== undefined) {
+          const actual = typeof value === 'object' ? value.actual : null;
+          const achievement = typeof value === 'object' ? value.achievement : value;
+          employeeAchievementsData.push({
+            Employee_KPI_Code: kpiCode,
+            Month_Key: monthKey,
+            Actual: actual,
+            Achievement: achievement
+          });
+        }
+      });
+    });
+    createSheet('Employee_Achievements', employeeAchievementsData, ['Employee_KPI_Code', 'Month_Key', 'Actual', 'Achievement']);
+
+    // Settings sheet
+    const settingsData = Object.entries(data.settings || {}).map(([key, value]) => ({
+      Key: key,
+      Value: typeof value === 'object' ? JSON.stringify(value) : String(value)
+    }));
+    createSheet('Settings', settingsData, ['Key', 'Value']);
+
+    // BU Scorecard Config sheet
+    const buScorecardConfigData = [];
+    Object.entries(data.buScorecardConfig || {}).forEach(([buCode, parentWeights]) => {
+      Object.entries(parentWeights || {}).forEach(([parentObjCode, weight]) => {
+        buScorecardConfigData.push({
+          BU_Code: buCode,
+          Parent_Objective_Code: parentObjCode,
+          Weight: weight
+        });
+      });
+    });
+    createSheet('BU_Scorecard_Config', buScorecardConfigData, ['BU_Code', 'Parent_Objective_Code', 'Weight']);
+
+    // Write as plain Excel (unencrypted)
+    await workbook.xlsx.writeFile(result.filePath);
+
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('Error exporting unencrypted file:', error);
     return { success: false, error: error.message };
   }
 });

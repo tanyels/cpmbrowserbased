@@ -25,8 +25,10 @@ function MainLayout() {
     filePath,
     hasUnsavedChanges,
     saveFile,
+    saveFileAs,
     isSaving,
-    closeFile
+    closeFile,
+    exportUnencrypted
   } = useStrategy();
   const { getCompanyInfo } = useLicense();
 
@@ -164,6 +166,23 @@ function MainLayout() {
           </h1>
         </div>
         <div className="header-right">
+          {filePath && filePath.endsWith('.cpme') && (
+            <button
+              className="btn btn-ghost"
+              onClick={exportUnencrypted}
+              title="Export as unencrypted Excel file for sharing"
+            >
+              Export .xlsx
+            </button>
+          )}
+          <button
+            className="btn btn-ghost"
+            onClick={saveFileAs}
+            disabled={isSaving}
+            title="Save with a new filename or convert to encrypted .cpme"
+          >
+            Save As
+          </button>
           <button
             className="btn btn-primary"
             onClick={handleSave}

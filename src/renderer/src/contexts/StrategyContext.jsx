@@ -280,9 +280,61 @@ export const StrategyProvider = ({ children }) => {
     }
   }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
 
+  // Save file as (allows changing filename/extension)
+  const saveFileAs = useCallback(async () => {
+    // Generate default name from current file or use generic name (without extension)
+    let defaultName = 'Strategy_Cascade';
+    if (filePath) {
+      const currentFileName = filePath.split(/[\\/]/).pop();
+      // Strip extension - the dialog handler will add .cpme
+      defaultName = currentFileName.replace(/\.(xlsx|xls|xlsm|cpme)$/i, '');
+    }
+
+    const newPath = await window.electronAPI.saveFileDialog(defaultName);
+    if (!newPath) return { success: false, cancelled: true };
+
+    setIsSaving(true);
+    try {
+      const data = {
+        vision,
+        mission,
+        pillars,
+        perspectives,
+        objectives,
+        businessUnits,
+        kpis,
+        objectiveLinks,
+        mapPositions,
+        globalValues,
+        measures,
+        parameterValues,
+        calculatedValues,
+        achievements,
+        teamMembers,
+        personalObjectives,
+        employeeKpis,
+        employeeAchievements,
+        settings,
+        buScorecardConfig
+      };
+
+      const result = await window.electronAPI.saveStrategyFile(newPath, data);
+      if (result.success) {
+        setFilePath(newPath);
+        setHasUnsavedChanges(false);
+        await window.electronAPI.setLastFilePath(newPath);
+      }
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setIsSaving(false);
+    }
+  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
+
   // Create new file
   const createNewFile = useCallback(async () => {
-    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade.xlsx');
+    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade');
     if (!path) return { success: false, cancelled: true };
 
     setIsLoading(true);
@@ -317,7 +369,7 @@ export const StrategyProvider = ({ children }) => {
 
   // Generate sample file
   const generateSampleFile = useCallback(async () => {
-    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade_Sample.xlsx');
+    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade_Sample');
     if (!path) return { success: false, cancelled: true };
 
     setIsLoading(true);
@@ -1394,8 +1446,8 @@ export const StrategyProvider = ({ children }) => {
   // ============================================
 
   const exportReport = useCallback(async () => {
-    const defaultName = `Strategy_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-    const path = await window.electronAPI.saveFileDialog(defaultName);
+    const defaultName = `Strategy_Report_${new Date().toISOString().split('T')[0]}`;
+    const path = await window.electronAPI.saveFileDialog({ name: defaultName, type: 'xlsx' });
     if (!path) return { success: false, cancelled: true };
 
     const data = {
@@ -1424,12 +1476,54 @@ export const StrategyProvider = ({ children }) => {
       return { success: false, error: 'No reviewed KPIs to export for this Business Unit' };
     }
 
-    const defaultName = `${buName.replace(/[^a-zA-Z0-9]/g, '_')}_KPI_Cards.xlsx`;
-    const outputPath = await window.electronAPI.saveFileDialog(defaultName);
+    const defaultName = `${buName.replace(/[^a-zA-Z0-9]/g, '_')}_KPI_Cards`;
+    const outputPath = await window.electronAPI.saveFileDialog({ name: defaultName, type: 'xlsx' });
     if (!outputPath) return { success: false, cancelled: true };
 
     return await window.electronAPI.generateKPICards(null, outputPath, buKPIs, buName);
   }, [businessUnits, kpis]);
+
+  // Export unencrypted .xlsx file (for sharing with users without license)
+  const exportUnencrypted = useCallback(async () => {
+    // Generate default filename from current file path
+    let defaultName = 'Strategy_Export.xlsx';
+    if (filePath) {
+      const currentFileName = filePath.split(/[\\/]/).pop();
+      // Replace .cpme with .xlsx, or add .xlsx if no extension
+      if (currentFileName.endsWith('.cpme')) {
+        defaultName = currentFileName.replace(/\.cpme$/, '.xlsx');
+      } else if (currentFileName.endsWith('.xlsx')) {
+        defaultName = currentFileName.replace(/\.xlsx$/, '_export.xlsx');
+      } else {
+        defaultName = currentFileName + '.xlsx';
+      }
+    }
+
+    const data = {
+      vision,
+      mission,
+      pillars,
+      perspectives,
+      objectives,
+      businessUnits,
+      kpis,
+      objectiveLinks,
+      mapPositions,
+      globalValues,
+      measures,
+      parameterValues,
+      calculatedValues,
+      achievements,
+      teamMembers,
+      personalObjectives,
+      employeeKpis,
+      employeeAchievements,
+      settings,
+      buScorecardConfig
+    };
+
+    return await window.electronAPI.exportUnencrypted(data, defaultName);
+  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
 
   // ============================================
   // CONTEXT VALUE
@@ -1467,6 +1561,7 @@ export const StrategyProvider = ({ children }) => {
     // File operations
     loadFile,
     saveFile,
+    saveFileAs,
     closeFile,
     createNewFile,
     generateSampleFile,
@@ -1595,7 +1690,8 @@ export const StrategyProvider = ({ children }) => {
 
     // Export
     exportReport,
-    exportKPICards
+    exportKPICards,
+    exportUnencrypted
   };
 
   return (

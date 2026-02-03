@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportStrategyReport: (filePath, data) => ipcRenderer.invoke('export-strategy-report', { filePath, data }),
   generateKPICards: (templatePath, outputPath, kpis, businessUnitName) =>
     ipcRenderer.invoke('generate-kpi-cards', { templatePath, outputPath, kpis, businessUnitName }),
+  exportUnencrypted: (data, defaultName) => ipcRenderer.invoke('export-unencrypted', { data, defaultName }),
 
   // Dialogs
   showConfirmDialog: (title, message) => ipcRenderer.invoke('show-confirm-dialog', { title, message }),
