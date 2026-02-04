@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { cloudKeyService } from '../services/cloudKeyService';
-import { cloudStorageService } from '../services/cloudStorageService';
-import { cryptoService } from '../services/cryptoService';
+import { browserKeyService } from '../services/browserKeyService';
+import { browserStorageService } from '../services/browserStorageService';
+import { browserCryptoService } from '../services/browserCryptoService';
 
 const CloudContext = createContext(null);
 
@@ -32,13 +32,13 @@ export function CloudProvider({ children }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const status = await cloudKeyService.getKeyStatus();
+        const status = await browserKeyService.getKeyStatus();
         if (status.hasKey) {
           setKeyStatus(status);
           // Derive encryption key from access key
-          const savedKey = localStorage.getItem('cpm-cloud-key');
+          const savedKey = browserKeyService.getCurrentKey();
           if (savedKey) {
-            await cryptoService.deriveKey(savedKey);
+            await browserCryptoService.deriveKey(savedKey);
           }
           // Load files
           await loadFilesInternal();
@@ -56,7 +56,7 @@ export function CloudProvider({ children }) {
 
   const loadFilesInternal = async () => {
     try {
-      const fileList = await cloudStorageService.listFiles();
+      const fileList = await browserStorageService.listFiles();
       setFiles(fileList || []);
     } catch (err) {
       console.error('Error loading cloud files:', err);
@@ -72,13 +72,13 @@ export function CloudProvider({ children }) {
     setError(null);
 
     try {
-      const keyData = await cloudKeyService.validateKey(accessKey);
+      const keyData = await browserKeyService.validateKey(accessKey);
 
-      // Derive encryption key from access key (lowercase to match stored key)
-      await cryptoService.deriveKey(accessKey.toLowerCase().trim());
+      // Derive encryption key from access key (normalized inside deriveKey)
+      await browserCryptoService.deriveKey(accessKey);
 
       // Refresh key status
-      const status = await cloudKeyService.getKeyStatus();
+      const status = await browserKeyService.getKeyStatus();
       setKeyStatus(status);
 
       await loadFilesInternal();
@@ -90,7 +90,7 @@ export function CloudProvider({ children }) {
 
   const refreshKeyStatus = useCallback(async () => {
     try {
-      const status = await cloudKeyService.getKeyStatus();
+      const status = await browserKeyService.getKeyStatus();
       setKeyStatus(status);
     } catch (err) {
       console.error('Error refreshing key status:', err);
@@ -99,8 +99,8 @@ export function CloudProvider({ children }) {
 
   const clearKey = useCallback(async () => {
     setError(null);
-    cloudKeyService.clearKey();
-    cryptoService.clearKey();
+    browserKeyService.clearKey();
+    browserCryptoService.clearKey();
     setKeyStatus(null);
     setFiles([]);
   }, []);
@@ -112,7 +112,7 @@ export function CloudProvider({ children }) {
     setUploading(true);
 
     try {
-      const result = await cloudStorageService.uploadFile(fileBuffer, displayName);
+      const result = await browserStorageService.uploadFile(fileBuffer, displayName);
       await loadFilesInternal();
       await refreshKeyStatus();
       return result;
@@ -128,7 +128,7 @@ export function CloudProvider({ children }) {
     setUploading(true);
 
     try {
-      const result = await cloudStorageService.updateFile(fileBuffer, storagePath);
+      const result = await browserStorageService.updateFile(fileBuffer, storagePath);
       await loadFilesInternal();
       await refreshKeyStatus();
       return result;
@@ -142,14 +142,14 @@ export function CloudProvider({ children }) {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to download files');
     setError(null);
 
-    return await cloudStorageService.downloadFile(storagePath);
+    return await browserStorageService.downloadFile(storagePath);
   }, [keyStatus]);
 
   const deleteFile = useCallback(async (storagePath) => {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to delete files');
     setError(null);
 
-    await cloudStorageService.deleteFile(storagePath);
+    await browserStorageService.deleteFile(storagePath);
     await loadFilesInternal();
     await refreshKeyStatus();
     return true;
@@ -159,7 +159,7 @@ export function CloudProvider({ children }) {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to rename files');
     setError(null);
 
-    const result = await cloudStorageService.renameFile(storagePath, newName);
+    const result = await browserStorageService.renameFile(storagePath, newName);
     await loadFilesInternal();
     return result;
   }, [keyStatus]);

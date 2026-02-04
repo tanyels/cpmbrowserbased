@@ -1,6 +1,6 @@
 // Browser-compatible File Service using ExcelJS
 import ExcelJS from 'exceljs';
-import { cryptoService } from './cryptoService';
+import { browserCryptoService } from './browserCryptoService';
 
 // Helper to generate IDs
 const generateId = (prefix) => {
@@ -59,7 +59,7 @@ class FileService {
     let workbook = new ExcelJS.Workbook();
 
     // Decrypt the file
-    const decryptedBuffer = await cryptoService.decrypt(arrayBuffer);
+    const decryptedBuffer = await browserCryptoService.decrypt(arrayBuffer);
     await workbook.xlsx.load(decryptedBuffer);
 
     // Initialize data structure
@@ -612,7 +612,7 @@ class FileService {
     const buffer = await workbook.xlsx.writeBuffer();
 
     // Encrypt the buffer
-    const encryptedBuffer = await cryptoService.encrypt(buffer);
+    const encryptedBuffer = await browserCryptoService.encrypt(buffer);
 
     return encryptedBuffer;
   }

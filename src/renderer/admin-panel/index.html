@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CPM Browser Admin Panel</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+    }
+
+    .login-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .login-box {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-box h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #333;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: #555;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #28a745;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-primary {
+      background: #28a745;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #218838;
+    }
+
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c82333;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 14px;
+      width: auto;
+    }
+
+    .error-msg {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .success-msg {
+      background: #d4edda;
+      color: #155724;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    /* Admin Panel Styles */
+    .admin-container {
+      display: none;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .admin-header h1 {
+      color: #333;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .stat-card h3 {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin-bottom: 30px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .section-header h2 {
+      font-size: 18px;
+      color: #333;
+    }
+
+    .section-body {
+      padding: 24px;
+    }
+
+    .keys-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .keys-table th,
+    .keys-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    .keys-table th {
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .keys-table tr:hover {
+      background: #f8f9fa;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .badge-success {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .badge-danger {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .badge-warning {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal h2 {
+      margin-bottom: 20px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+    }
+
+    .key-display {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 18px;
+      text-align: center;
+      margin: 20px 0;
+      user-select: all;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 768px) {
+      .keys-table {
+        display: block;
+        overflow-x: auto;
+      }
+
+      .admin-header {
+        flex-direction: column;
+        gap: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginContainer" class="login-container">
+    <div class="login-box">
+      <h1>CPM Admin Panel</h1>
+      <div id="loginError" class="error-msg hidden"></div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Panel -->
+  <div id="adminContainer" class="admin-container">
+    <div class="admin-header">
+      <h1>CPM Browser Key Management</h1>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Total Keys</h3>
+        <div class="value" id="statTotalKeys">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Active Keys</h3>
+        <div class="value" id="statActiveKeys">0</div>
+      </div>
+      <div class="stat-card">
+        <h3>Total Storage Used</h3>
+        <div class="value" id="statStorageUsed">0 MB</div>
+      </div>
+      <div class="stat-card">
+        <h3>Total Files</h3>
+        <div class="value" id="statTotalFiles">0</div>
+      </div>
+    </div>
+
+    <!-- Keys Section -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Access Keys</h2>
+        <button class="btn btn-primary btn-sm" onclick="showGenerateKeyModal()">Generate New Key</button>
+      </div>
+      <div class="section-body">
+        <div id="keysMessage" class="success-msg hidden"></div>
+        <table class="keys-table">
+          <thead>
+            <tr>
+              <th>Key Preview</th>
+              <th>Status</th>
+              <th>Storage</th>
+              <th>Created</th>
+              <th>Expires</th>
+              <th>Last Used</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="keysTableBody">
+            <tr><td colspan="7" style="text-align:center;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Key Modal -->
+  <div id="generateKeyModal" class="modal-overlay">
+    <div class="modal">
+      <h2>Generate New Access Key</h2>
+      <div class="form-group">
+        <label for="keyQuota">Storage Quota (MB)</label>
+        <input type="number" id="keyQuota" value="100" min="1" max="10000">
+      </div>
+      <div class="form-group">
+        <label for="keyExpiration">Expiration (days from activation, 0 = never)</label>
+        <input type="number" id="keyExpiration" value="365" min="0">
+      </div>
+      <div class="form-group">
+        <label for="keyNotes">Notes (optional)</label>
+        <input type="text" id="keyNotes" placeholder="e.g., Client name">
+      </div>
+      <div id="generatedKeyDisplay" class="hidden">
+        <p><strong>New Key Generated:</strong></p>
+        <div class="key-display" id="generatedKey"></div>
+        <p style="color:#666;font-size:14px;text-align:center;">Copy this key now. It cannot be retrieved later!</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('generateKeyModal')">Close</button>
+        <button class="btn btn-primary" id="generateKeyBtn" onclick="generateKey()">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Key Modal -->
+  <div id="editKeyModal" class="modal-overlay">
+    <div class="modal">
+      <h2>Edit Access Key</h2>
+      <input type="hidden" id="editKeyId">
+      <div class="form-group">
+        <label for="editKeyQuota">Storage Quota (MB)</label>
+        <input type="number" id="editKeyQuota" min="1" max="10000">
+      </div>
+      <div class="form-group">
+        <label for="editKeyActive">Status</label>
+        <select id="editKeyActive" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;">
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="editKeyNotes">Notes</label>
+        <input type="text" id="editKeyNotes">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('editKeyModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveKeyEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ==========================================
+    // CONFIGURATION - UPDATE THESE VALUES!
+    // ==========================================
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    // ==========================================
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let isLoggedIn = false;
+
+    // Hash password using SHA-256
+    async function hashPassword(password) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Generate random key in format xxxx-xxxx-xxxx-xxxx
+    function generateRandomKey() {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let key = '';
+      for (let i = 0; i < 16; i++) {
+        if (i > 0 && i % 4 === 0) key += '-';
+        key += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return key;
+    }
+
+    // Login form handler
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('loginError');
+
+      errorEl.classList.add('hidden');
+
+      try {
+        const passwordHash = await hashPassword(password);
+
+        const { data, error } = await supabase
+          .from('browser_admin')
+          .select('*')
+          .eq('username', username)
+          .eq('password_hash', passwordHash)
+          .single();
+
+        if (error || !data) {
+          errorEl.textContent = 'Invalid username or password';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+
+        // Update last login
+        await supabase
+          .from('browser_admin')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', data.id);
+
+        isLoggedIn = true;
+        document.getElementById('loginContainer').style.display = 'none';
+        document.getElementById('adminContainer').style.display = 'block';
+        loadDashboard();
+      } catch (err) {
+        errorEl.textContent = 'Login failed: ' + err.message;
+        errorEl.classList.remove('hidden');
+      }
+    });
+
+    function logout() {
+      isLoggedIn = false;
+      document.getElementById('loginContainer').style.display = 'flex';
+      document.getElementById('adminContainer').style.display = 'none';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+
+    async function loadDashboard() {
+      if (!isLoggedIn) return;
+
+      try {
+        // Load keys
+        const { data: keys, error: keysError } = await supabase
+          .from('browser_access_keys')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (keysError) throw keysError;
+
+        // Load files count
+        const { count: filesCount } = await supabase
+          .from('browser_cloud_files')
+          .select('*', { count: 'exact', head: true });
+
+        // Calculate stats
+        const totalKeys = keys?.length || 0;
+        const activeKeys = keys?.filter(k => k.is_active).length || 0;
+        const totalStorage = keys?.reduce((sum, k) => sum + (k.used_bytes || 0), 0) || 0;
+
+        document.getElementById('statTotalKeys').textContent = totalKeys;
+        document.getElementById('statActiveKeys').textContent = activeKeys;
+        document.getElementById('statStorageUsed').textContent = formatBytes(totalStorage);
+        document.getElementById('statTotalFiles').textContent = filesCount || 0;
+
+        // Render keys table
+        renderKeysTable(keys || []);
+      } catch (err) {
+        console.error('Error loading dashboard:', err);
+        alert('Error loading dashboard: ' + err.message);
+      }
+    }
+
+    function renderKeysTable(keys) {
+      const tbody = document.getElementById('keysTableBody');
+
+      if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">No keys yet. Generate your first key!</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = keys.map(key => `
+        <tr>
+          <td><code>${key.key_preview || '****-****-****-****'}</code></td>
+          <td>
+            ${key.is_active
+              ? '<span class="badge badge-success">Active</span>'
+              : '<span class="badge badge-danger">Inactive</span>'}
+            ${key.expires_at && new Date(key.expires_at) < new Date()
+              ? '<span class="badge badge-warning">Expired</span>'
+              : ''}
+          </td>
+          <td>${formatBytes(key.used_bytes || 0)} / ${formatBytes(key.quota_bytes || 0)}</td>
+          <td>${formatDate(key.created_at)}</td>
+          <td>${key.expires_at ? formatDate(key.expires_at) : 'Never'}</td>
+          <td>${key.last_used_at ? formatDate(key.last_used_at) : 'Never'}</td>
+          <td class="actions">
+            <button class="btn btn-secondary btn-sm" onclick="editKey('${key.id}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteKey('${key.id}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function showGenerateKeyModal() {
+      document.getElementById('generatedKeyDisplay').classList.add('hidden');
+      document.getElementById('generateKeyBtn').classList.remove('hidden');
+      document.getElementById('keyQuota').value = '100';
+      document.getElementById('keyExpiration').value = '365';
+      document.getElementById('keyNotes').value = '';
+      document.getElementById('generateKeyModal').style.display = 'flex';
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).style.display = 'none';
+    }
+
+    async function generateKey() {
+      const quotaMB = parseInt(document.getElementById('keyQuota').value) || 100;
+      const expirationDays = parseInt(document.getElementById('keyExpiration').value) || 0;
+      const notes = document.getElementById('keyNotes').value;
+
+      const plainKey = generateRandomKey();
+      const keyHash = await hashPassword(plainKey); // Using same hash function
+      const keyPreview = plainKey.substring(0, 4) + '-****-****-' + plainKey.substring(15);
+
+      try {
+        const { error } = await supabase
+          .from('browser_access_keys')
+          .insert({
+            key_hash: keyHash,
+            key_preview: keyPreview,
+            quota_bytes: quotaMB * 1024 * 1024,
+            notes: notes || null
+          });
+
+        if (error) throw error;
+
+        document.getElementById('generatedKey').textContent = plainKey;
+        document.getElementById('generatedKeyDisplay').classList.remove('hidden');
+        document.getElementById('generateKeyBtn').classList.add('hidden');
+
+        loadDashboard();
+        showMessage('Key generated successfully!');
+      } catch (err) {
+        alert('Error generating key: ' + err.message);
+      }
+    }
+
+    async function editKey(keyId) {
+      const { data: key, error } = await supabase
+        .from('browser_access_keys')
+        .select('*')
+        .eq('id', keyId)
+        .single();
+
+      if (error || !key) {
+        alert('Error loading key');
+        return;
+      }
+
+      document.getElementById('editKeyId').value = keyId;
+      document.getElementById('editKeyQuota').value = Math.round((key.quota_bytes || 0) / 1024 / 1024);
+      document.getElementById('editKeyActive').value = key.is_active ? 'true' : 'false';
+      document.getElementById('editKeyNotes').value = key.notes || '';
+      document.getElementById('editKeyModal').style.display = 'flex';
+    }
+
+    async function saveKeyEdit() {
+      const keyId = document.getElementById('editKeyId').value;
+      const quotaMB = parseInt(document.getElementById('editKeyQuota').value) || 100;
+      const isActive = document.getElementById('editKeyActive').value === 'true';
+      const notes = document.getElementById('editKeyNotes').value;
+
+      try {
+        const { error } = await supabase
+          .from('browser_access_keys')
+          .update({
+            quota_bytes: quotaMB * 1024 * 1024,
+            is_active: isActive,
+            notes: notes || null
+          })
+          .eq('id', keyId);
+
+        if (error) throw error;
+
+        closeModal('editKeyModal');
+        loadDashboard();
+        showMessage('Key updated successfully!');
+      } catch (err) {
+        alert('Error updating key: ' + err.message);
+      }
+    }
+
+    async function deleteKey(keyId) {
+      if (!confirm('Are you sure you want to delete this key? This will also delete all files associated with it!')) {
+        return;
+      }
+
+      try {
+        // Delete associated files from storage first
+        const { data: files } = await supabase
+          .from('browser_cloud_files')
+          .select('storage_path')
+          .eq('key_id', keyId);
+
+        if (files && files.length > 0) {
+          const paths = files.map(f => f.storage_path);
+          await supabase.storage.from('cpm-browser-storage').remove(paths);
+        }
+
+        // Delete key (cascade will delete file metadata)
+        const { error } = await supabase
+          .from('browser_access_keys')
+          .delete()
+          .eq('id', keyId);
+
+        if (error) throw error;
+
+        loadDashboard();
+        showMessage('Key deleted successfully!');
+      } catch (err) {
+        alert('Error deleting key: ' + err.message);
+      }
+    }
+
+    function showMessage(msg) {
+      const el = document.getElementById('keysMessage');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 3000);
+    }
+
+    // Check if Supabase is configured
+    if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+      document.getElementById('loginContainer').innerHTML = `
+        <div class="login-box">
+          <h1>Configuration Required</h1>
+          <div class="error-msg">
+            Please edit index.html and set your Supabase URL and Anon Key at the top of the script section.
+          </div>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
