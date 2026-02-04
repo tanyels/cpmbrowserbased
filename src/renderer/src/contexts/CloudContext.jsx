@@ -74,8 +74,8 @@ export function CloudProvider({ children }) {
     try {
       const keyData = await cloudKeyService.validateKey(accessKey);
 
-      // Derive encryption key from access key
-      await cryptoService.deriveKey(accessKey);
+      // Derive encryption key from access key (lowercase to match stored key)
+      await cryptoService.deriveKey(accessKey.toLowerCase().trim());
 
       // Refresh key status
       const status = await cloudKeyService.getKeyStatus();
