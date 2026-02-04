@@ -2,11 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useCloud } from '../contexts/CloudContext';
 import { useStrategy } from '../contexts/StrategyContext';
 import { fileService } from '../services/fileService';
-import { cryptoService } from '../services/cryptoService';
 import {
   Cloud, Upload, Download, Trash2, RefreshCw,
   FileText, Clock, HardDrive, AlertCircle, Check,
-  Key, Loader, Edit2, X, FolderOpen, LogOut, ExternalLink
+  Key, Loader, Edit2, X, FolderOpen, LogOut, ExternalLink, Lock
 } from 'lucide-react';
 
 function CloudFileBrowser({ onFileOpened }) {
@@ -43,6 +42,7 @@ function CloudFileBrowser({ onFileOpened }) {
   const [localError, setLocalError] = useState('');
 
   const fileInputRef = useRef(null);
+  const xlsxInputRef = useRef(null);
 
   // Clear messages after a delay
   useEffect(() => {
@@ -234,7 +234,7 @@ function CloudFileBrowser({ onFileOpened }) {
     }
   };
 
-  // Handle file selection from input
+  // Handle .cpme file selection from input
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -251,9 +251,6 @@ function CloudFileBrowser({ onFileOpened }) {
         const displayName = file.name.replace(/\.cpme$/, '');
         await uploadFile(arrayBuffer, displayName);
         setSuccessMessage('File uploaded successfully!');
-      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        // Need to encrypt first - this is complex, skip for now
-        setLocalError('Please upload .cpme files only. Use the app to create and save strategy files.');
       } else {
         setLocalError('Please select a .cpme file');
       }
@@ -264,6 +261,57 @@ function CloudFileBrowser({ onFileOpened }) {
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle xlsx file selection - encrypt and upload
+  const handleEncryptAndUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      setLocalError('Please select an Excel file (.xlsx or .xls)');
+      if (xlsxInputRef.current) {
+        xlsxInputRef.current.value = '';
+      }
+      return;
+    }
+
+    setActionLoading('encrypt');
+    clearError();
+    setLocalError('');
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Read the xlsx file using fileService (which will encrypt it)
+      const result = await fileService.readStrategyFile(arrayBuffer);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to read Excel file');
+      }
+
+      // Now write it back as encrypted cpme
+      const writeResult = await fileService.writeStrategyFile(result.data);
+
+      if (!writeResult.success || !writeResult.buffer) {
+        throw new Error(writeResult.error || 'Failed to encrypt file');
+      }
+
+      // Upload the encrypted file
+      const displayName = file.name.replace(/\.(xlsx|xls)$/, '');
+      await uploadFile(writeResult.buffer, displayName);
+
+      setSuccessMessage('File encrypted and uploaded successfully!');
+      await refreshFiles();
+      await refreshKeyStatus();
+    } catch (err) {
+      setLocalError(err.message);
+    } finally {
+      setActionLoading(null);
+      if (xlsxInputRef.current) {
+        xlsxInputRef.current.value = '';
       }
     }
   };
@@ -387,13 +435,20 @@ function CloudFileBrowser({ onFileOpened }) {
 
   return (
     <div className="cloud-browser">
-      {/* Hidden file input */}
+      {/* Hidden file inputs */}
       <input
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
         accept=".cpme"
         onChange={handleFileSelect}
+      />
+      <input
+        type="file"
+        ref={xlsxInputRef}
+        style={{ display: 'none' }}
+        accept=".xlsx,.xls"
+        onChange={handleEncryptAndUpload}
       />
 
       {/* Header */}
@@ -466,10 +521,14 @@ function CloudFileBrowser({ onFileOpened }) {
       {/* Upload Section */}
       <div className="cloud-upload-section">
         <h3>Upload to Cloud</h3>
+        <div className="cloud-security-notice">
+          <AlertCircle size={14} />
+          <span>For security, only encrypted .cpme files can be uploaded to cloud storage.</span>
+        </div>
         <p className="cloud-upload-hint">
           {filePath
-            ? `Current file: ${filePath}`
-            : 'Create a new strategy or select a .cpme file to upload'
+            ? `Current file: ${filePath}${!filePath.endsWith('.cpme') ? ' (needs encryption)' : ''}`
+            : 'Open a .cpme file to upload it to the cloud'
           }
         </p>
         <div className="cloud-upload-buttons">
@@ -486,12 +545,19 @@ function CloudFileBrowser({ onFileOpened }) {
           </button>
           <button
             className="btn btn-secondary"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => xlsxInputRef.current?.click()}
             disabled={uploading || actionLoading || !isOnline}
           >
-            <Upload size={16} /> Upload .cpme File
+            {actionLoading === 'encrypt' ? (
+              <><Loader size={16} className="spinner" /> Encrypting...</>
+            ) : (
+              <><Lock size={16} /> Encrypt & Upload</>
+            )}
           </button>
         </div>
+        <p className="cloud-encrypt-note">
+          To upload an .xlsx file, click "Encrypt & Upload" to select, encrypt, and upload it to cloud.
+        </p>
       </div>
 
       {/* File List */}
