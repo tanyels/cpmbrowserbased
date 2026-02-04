@@ -62,6 +62,18 @@ class FileService {
     const decryptedBuffer = await browserCryptoService.decrypt(arrayBuffer);
     await workbook.xlsx.load(decryptedBuffer);
 
+    return this._parseWorkbook(workbook);
+  }
+
+  // Read unencrypted xlsx file
+  async readUnencryptedXlsx(arrayBuffer) {
+    let workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(arrayBuffer);
+    return this._parseWorkbook(workbook);
+  }
+
+  // Parse workbook into data structure
+  _parseWorkbook(workbook) {
     // Initialize data structure
     const data = {
       vision: { Statement: '', Statement_AR: '' },

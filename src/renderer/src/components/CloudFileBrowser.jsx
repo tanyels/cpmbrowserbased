@@ -285,23 +285,15 @@ function CloudFileBrowser({ onFileOpened }) {
     try {
       const arrayBuffer = await file.arrayBuffer();
 
-      // Read the xlsx file using fileService (which will encrypt it)
-      const result = await fileService.readStrategyFile(arrayBuffer);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to read Excel file');
-      }
+      // Read the xlsx file (unencrypted)
+      const data = await fileService.readUnencryptedXlsx(arrayBuffer);
 
       // Now write it back as encrypted cpme
-      const writeResult = await fileService.writeStrategyFile(result.data);
-
-      if (!writeResult.success || !writeResult.buffer) {
-        throw new Error(writeResult.error || 'Failed to encrypt file');
-      }
+      const encryptedBuffer = await fileService.writeStrategyFile(data);
 
       // Upload the encrypted file
       const displayName = file.name.replace(/\.(xlsx|xls)$/, '');
-      await uploadFile(writeResult.buffer, displayName);
+      await uploadFile(encryptedBuffer, displayName);
 
       setSuccessMessage('File encrypted and uploaded successfully!');
       await refreshFiles();
