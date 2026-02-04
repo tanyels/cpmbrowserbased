@@ -106,7 +106,7 @@ function FileSelection() {
               className="hero-logo"
             />
             <p className="hero-founded">Established 1991</p>
-            <p className="hero-subtitle">CPM Strategy Cascade Platform</p>
+            <p className="hero-subtitle">CPM</p>
             <p className="hero-description">
               Design, structure, and cascade your organization's strategy into measurable KPIs across all business unit levels
             </p>
