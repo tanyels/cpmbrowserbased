@@ -356,15 +356,15 @@ body {
 }
 
 .btn-hero-primary {
-  background: linear-gradient(135deg, #4472C4 0%, #365899 100%);
+  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(68, 114, 196, 0.4);
+  box-shadow: 0 4px 14px rgba(40, 167, 69, 0.4);
 }
 
 .btn-hero-primary:hover {
-  background: linear-gradient(135deg, #5282D4 0%, #4472C4 100%);
+  background: linear-gradient(135deg, #34ce57 0%, #28a745 100%);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(68, 114, 196, 0.5);
+  box-shadow: 0 6px 20px rgba(40, 167, 69, 0.5);
 }
 
 .btn-hero-secondary {
