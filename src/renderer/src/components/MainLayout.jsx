@@ -85,31 +85,21 @@ function MainLayout() {
   }, [location.pathname]);
 
   const handleSave = async () => {
-    console.log('=== HANDLE SAVE ===');
-    console.log('isFromCloud:', isFromCloud);
-    console.log('cloudStoragePath:', cloudStoragePath);
-    console.log('filePath:', filePath);
-
-    // Save locally first
+    // Save and get the encrypted buffer
     const result = await saveFile();
-    console.log('saveFile result:', result);
 
     // If file is from cloud, also update in cloud
-    if (result?.success && isFromCloud && cloudStoragePath && filePath) {
-      console.log('Syncing to cloud...');
+    if (result?.success && result.buffer && isFromCloud && cloudStoragePath) {
       setIsSavingToCloud(true);
       try {
-        const cloudResult = await updateFile(filePath, cloudStoragePath);
-        console.log('Cloud sync result:', cloudResult);
+        await updateFile(result.buffer, cloudStoragePath);
         alert('Saved and synced to cloud!');
       } catch (err) {
         console.error('Failed to sync to cloud:', err);
-        alert('Saved locally but failed to sync to cloud: ' + err.message);
+        alert('Saved but failed to sync to cloud: ' + err.message);
       } finally {
         setIsSavingToCloud(false);
       }
-    } else {
-      console.log('Not syncing to cloud - conditions not met');
     }
   };
 
@@ -131,14 +121,14 @@ function MainLayout() {
     setIsSavingToCloud(true);
 
     try {
-      // Save locally first to ensure file is up to date
+      // Save and get the encrypted buffer
       const result = await saveFile();
-      if (!result?.success) {
+      if (!result?.success || !result.buffer) {
         throw new Error(result?.error || 'Failed to save file');
       }
 
       // Upload to cloud with new name
-      await uploadFile(filePath, cleanName);
+      await uploadFile(result.buffer, cleanName);
       alert(`Saved to cloud as "${cleanName}"!`);
     } catch (err) {
       console.error('Failed to save as:', err);
@@ -150,18 +140,12 @@ function MainLayout() {
 
   const handleClose = async () => {
     if (hasUnsavedChanges) {
-      const result = await window.electronAPI.showUnsavedWarning();
-      if (result === 0) {
-        // Save (including cloud sync if from cloud) and close
+      const shouldSave = window.confirm('You have unsaved changes. Do you want to save before closing?');
+      if (shouldSave) {
         await handleSave();
-        closeFile();
-        navigate('/');
-      } else if (result === 1) {
-        // Don't save, just close
-        closeFile();
-        navigate('/');
       }
-      // result === 2 means cancel, do nothing
+      closeFile();
+      navigate('/');
     } else {
       closeFile();
       navigate('/');

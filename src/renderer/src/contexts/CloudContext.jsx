@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { cloudKeyService } from '../services/cloudKeyService';
+import { cloudStorageService } from '../services/cloudStorageService';
+import { cryptoService } from '../services/cryptoService';
 
 const CloudContext = createContext(null);
 
@@ -8,10 +11,8 @@ export function CloudProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
-  const [isConfigured, setIsConfigured] = useState(false);
+  const [isConfigured] = useState(true); // Always configured in web version
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  const isElectron = typeof window !== 'undefined' && window.electronAPI?.cloud;
 
   // Check online status
   useEffect(() => {
@@ -27,30 +28,20 @@ export function CloudProvider({ children }) {
     };
   }, []);
 
-  // Initialize and check configuration
+  // Initialize and check for saved key
   useEffect(() => {
-    if (!isElectron) {
-      setLoading(false);
-      return;
-    }
-
     const init = async () => {
       try {
-        // Check if Supabase is configured
-        const configured = await window.electronAPI.cloud.isConfigured();
-        setIsConfigured(configured);
-
-        if (!configured) {
-          setLoading(false);
-          return;
-        }
-
-        // Get key status (checks for saved key)
-        const statusResult = await window.electronAPI.cloud.getKeyStatus();
-        if (statusResult.success && statusResult.data?.hasKey) {
-          setKeyStatus(statusResult.data);
-          // Load files if we have a valid key (force load since isConfigured state may not be updated yet)
-          await loadFiles(true);
+        const status = await cloudKeyService.getKeyStatus();
+        if (status.hasKey) {
+          setKeyStatus(status);
+          // Derive encryption key from access key
+          const savedKey = localStorage.getItem('cpm-cloud-key');
+          if (savedKey) {
+            await cryptoService.deriveKey(savedKey);
+          }
+          // Load files
+          await loadFilesInternal();
         }
       } catch (err) {
         console.error('Cloud init error:', err);
@@ -61,149 +52,121 @@ export function CloudProvider({ children }) {
     };
 
     init();
-  }, [isElectron]);
+  }, []);
 
-  const loadFiles = useCallback(async (forceLoad = false) => {
-    if (!isElectron || (!isConfigured && !forceLoad)) return;
-
+  const loadFilesInternal = async () => {
     try {
-      const result = await window.electronAPI.cloud.listFiles();
-      if (result.success) {
-        setFiles(result.data || []);
-      } else {
-        throw new Error(result.error);
-      }
+      const fileList = await cloudStorageService.listFiles();
+      setFiles(fileList || []);
     } catch (err) {
       console.error('Error loading cloud files:', err);
       setError(err.message);
     }
-  }, [isElectron, isConfigured]);
+  };
+
+  const loadFiles = useCallback(async () => {
+    await loadFilesInternal();
+  }, []);
 
   const validateKey = useCallback(async (accessKey) => {
-    if (!isElectron) throw new Error('Not running in Electron');
     setError(null);
 
-    const result = await window.electronAPI.cloud.validateKey(accessKey);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
+    try {
+      const keyData = await cloudKeyService.validateKey(accessKey);
 
-    // Refresh key status after validation
-    const statusResult = await window.electronAPI.cloud.getKeyStatus();
-    if (statusResult.success) {
-      setKeyStatus(statusResult.data);
-    }
+      // Derive encryption key from access key
+      await cryptoService.deriveKey(accessKey);
 
-    await loadFiles();
-    return result.data;
-  }, [isElectron, loadFiles]);
+      // Refresh key status
+      const status = await cloudKeyService.getKeyStatus();
+      setKeyStatus(status);
+
+      await loadFilesInternal();
+      return keyData;
+    } catch (err) {
+      throw new Error(err.message);
+    }
+  }, []);
 
   const refreshKeyStatus = useCallback(async () => {
-    if (!isElectron) return;
-
     try {
-      const statusResult = await window.electronAPI.cloud.getKeyStatus();
-      if (statusResult.success) {
-        setKeyStatus(statusResult.data);
-      }
+      const status = await cloudKeyService.getKeyStatus();
+      setKeyStatus(status);
     } catch (err) {
       console.error('Error refreshing key status:', err);
     }
-  }, [isElectron]);
+  }, []);
 
   const clearKey = useCallback(async () => {
-    if (!isElectron) return;
     setError(null);
-
-    const result = await window.electronAPI.cloud.clearKey();
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-
+    cloudKeyService.clearKey();
+    cryptoService.clearKey();
     setKeyStatus(null);
     setFiles([]);
-  }, [isElectron]);
+  }, []);
 
-  const uploadFile = useCallback(async (localPath, displayName) => {
-    if (!isElectron) throw new Error('Not running in Electron');
+  // Upload file buffer to cloud
+  const uploadFile = useCallback(async (fileBuffer, displayName) => {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to upload files');
     setError(null);
     setUploading(true);
 
     try {
-      const result = await window.electronAPI.cloud.uploadFile(localPath, displayName);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      await loadFiles();
-      await refreshKeyStatus(); // Refresh to update used bytes
-      return result.data;
+      const result = await cloudStorageService.uploadFile(fileBuffer, displayName);
+      await loadFilesInternal();
+      await refreshKeyStatus();
+      return result;
     } finally {
       setUploading(false);
     }
-  }, [isElectron, keyStatus, loadFiles, refreshKeyStatus]);
+  }, [keyStatus, refreshKeyStatus]);
 
-  const updateFile = useCallback(async (localPath, storagePath) => {
-    if (!isElectron) throw new Error('Not running in Electron');
+  // Update existing file in cloud
+  const updateFile = useCallback(async (fileBuffer, storagePath) => {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to update files');
     setError(null);
     setUploading(true);
 
     try {
-      const result = await window.electronAPI.cloud.updateFile(localPath, storagePath);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      await loadFiles();
-      await refreshKeyStatus(); // Refresh to update used bytes
-      return result.data;
+      const result = await cloudStorageService.updateFile(fileBuffer, storagePath);
+      await loadFilesInternal();
+      await refreshKeyStatus();
+      return result;
     } finally {
       setUploading(false);
     }
-  }, [isElectron, keyStatus, loadFiles, refreshKeyStatus]);
+  }, [keyStatus, refreshKeyStatus]);
 
-  const downloadFile = useCallback(async (storagePath, localDestination) => {
-    if (!isElectron) throw new Error('Not running in Electron');
+  // Download file from cloud (returns ArrayBuffer)
+  const downloadFile = useCallback(async (storagePath) => {
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to download files');
     setError(null);
 
-    const result = await window.electronAPI.cloud.downloadFile(storagePath, localDestination);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-    return result.data;
-  }, [isElectron, keyStatus]);
+    return await cloudStorageService.downloadFile(storagePath);
+  }, [keyStatus]);
 
   const deleteFile = useCallback(async (storagePath) => {
-    if (!isElectron) throw new Error('Not running in Electron');
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to delete files');
     setError(null);
 
-    const result = await window.electronAPI.cloud.deleteFile(storagePath);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-    await loadFiles();
-    await refreshKeyStatus(); // Refresh to update used bytes
+    await cloudStorageService.deleteFile(storagePath);
+    await loadFilesInternal();
+    await refreshKeyStatus();
     return true;
-  }, [isElectron, keyStatus, loadFiles, refreshKeyStatus]);
+  }, [keyStatus, refreshKeyStatus]);
 
   const renameFile = useCallback(async (storagePath, newName) => {
-    if (!isElectron) throw new Error('Not running in Electron');
     if (!keyStatus?.hasKey) throw new Error('You must enter a valid access key to rename files');
     setError(null);
 
-    const result = await window.electronAPI.cloud.renameFile(storagePath, newName);
-    if (!result.success) {
-      throw new Error(result.error);
-    }
-    await loadFiles();
-    return result.data;
-  }, [isElectron, keyStatus, loadFiles]);
+    const result = await cloudStorageService.renameFile(storagePath, newName);
+    await loadFilesInternal();
+    return result;
+  }, [keyStatus]);
 
   const refreshFiles = useCallback(async () => {
-    await loadFiles();
-  }, [loadFiles]);
+    await loadFilesInternal();
+  }, []);
 
   const value = {
     keyStatus,

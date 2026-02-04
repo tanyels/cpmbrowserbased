@@ -7,9 +7,12 @@
     "start": "concurrently \"npm run start:renderer\" \"wait-on http://localhost:3000 && npm run start:main\"",
     "start:main": "electron .",
     "start:renderer": "cd src/renderer && vite",
+    "start:web": "cd src/renderer && vite --host",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "cd src/renderer && vite build",
     "build:main": "cp -r src/main dist/",
+    "build:web": "cd src/renderer && vite build",
+    "preview:web": "cd src/renderer && vite preview",
     "package": "electron-builder",
     "package:win": "electron-builder --win",
     "generate-sample": "node scripts/generate-sample-data.js"
@@ -40,10 +43,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.94.0",
+    "buffer": "^6.0.3",
     "electron-store": "^8.2.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.563.0",
-    "node-machine-id": "^1.1.12"
+    "node-machine-id": "^1.1.12",
+    "stream-browserify": "^3.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

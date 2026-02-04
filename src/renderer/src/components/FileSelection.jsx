@@ -41,7 +41,7 @@ const screenshots = [
 
 function FileSelection() {
   const navigate = useNavigate();
-  const { loadFile, createNewFile, isLoading } = useStrategy();
+  const { createNewFile, isLoading } = useStrategy();
   const { getCompanyInfo } = useLicense();
   const { isConfigured: isCloudConfigured } = useCloud();
   const [loadError, setLoadError] = useState(null);
@@ -75,15 +75,11 @@ function FileSelection() {
     setIsAutoPlaying(false);
   }, []);
 
-  const handleOpenFile = async (filePath) => {
-    if (!filePath) return;
+  // For web version, file is already loaded by CloudFileBrowser
+  // This just navigates to the main view
+  const handleFileOpened = () => {
     setLoadError(null);
-    const result = await loadFile(filePath);
-    if (result.success) {
-      navigate('/main');
-    } else {
-      setLoadError(result.error);
-    }
+    navigate('/main');
   };
 
   const handleCreateNew = async () => {
@@ -163,9 +159,9 @@ function FileSelection() {
               >
                 <X size={24} />
               </button>
-              <CloudFileBrowser onFileOpened={(filePath) => {
+              <CloudFileBrowser onFileOpened={() => {
                 setShowCloudPanel(false);
-                handleOpenFile(filePath);
+                handleFileOpened();
               }} />
             </div>
           </div>

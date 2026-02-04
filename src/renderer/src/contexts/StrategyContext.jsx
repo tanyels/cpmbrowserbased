@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { fileService } from '../services/fileService';
 
 const StrategyContext = createContext(null);
 
@@ -11,13 +12,16 @@ export const useStrategy = () => {
 };
 
 export const StrategyProvider = ({ children }) => {
-  // File state
+  // File state - for web, filePath is actually the display name
   const [filePath, setFilePath] = useState(null);
   const [isFromCloud, setIsFromCloud] = useState(false);
   const [cloudStoragePath, setCloudStoragePath] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // In-memory file buffer (for web, we keep the data in memory)
+  const [currentFileBuffer, setCurrentFileBuffer] = useState(null);
 
   // Strategy data
   const [vision, setVisionState] = useState({ Statement: '', Statement_AR: '' });
@@ -34,40 +38,32 @@ export const StrategyProvider = ({ children }) => {
   const [globalValues, setGlobalValues] = useState([]);
   const [measures, setMeasures] = useState([]);
   const [parameterValues, setParameterValues] = useState({});
-  const [calculatedValues, setCalculatedValues] = useState({}); // { measureCode: { monthKey: { value, error } } }
-  const [achievements, setAchievements] = useState({}); // { measureCode: { monthKey: value } }
+  const [calculatedValues, setCalculatedValues] = useState({});
+  const [achievements, setAchievements] = useState({});
 
   // Team Members module data
   const [teamMembers, setTeamMembers] = useState([]);
   const [personalObjectives, setPersonalObjectives] = useState([]);
   const [employeeKpis, setEmployeeKpis] = useState([]);
-  const [employeeAchievements, setEmployeeAchievements] = useState({}); // { employeeKpiCode: { monthKey: value } }
+  const [employeeAchievements, setEmployeeAchievements] = useState({});
 
   // Admin settings
   const [settings, setSettings] = useState({
-    // Achievement Thresholds
     thresholdExcellent: 100,
     thresholdGood: 80,
     thresholdWarning: 60,
-    // Achievement Colors
     colorExcellent: '#28a745',
     colorGood: '#ffc107',
     colorWarning: '#fd7e14',
     colorPoor: '#dc3545',
-    // Achievement Limits
     overachievementCap: 200,
     employeeOverachievementCap: 200,
     gaugeMaxValue: 150,
-    // Organization Info
     organizationName: '',
     currencySymbol: '$'
   });
 
   // BU Scorecard Configuration
-  // Stores the weights each BU assigns to parent objectives
-  // L2 BUs: assign weights to SOs (L1 Objectives)
-  // L3 BUs: assign weights to L2 Objectives
-  // Format: { buCode: { parentObjCode: weight, ... } }
   const [buScorecardConfig, setBuScorecardConfig] = useState({});
 
   // Track if we're currently loading to avoid marking changes during load
@@ -104,7 +100,6 @@ export const StrategyProvider = ({ children }) => {
 
     if (missingOperationalObjs.length > 0) {
       setObjectives(prev => [...prev, ...missingOperationalObjs]);
-      // Only mark as unsaved if we're not in the middle of loading
       if (!isLoadingRef.current) {
         setHasUnsavedChanges(true);
       }
@@ -117,16 +112,13 @@ export const StrategyProvider = ({ children }) => {
 
   // Generate incremental ID based on existing items
   const generateIncrementalId = useCallback((prefix, existingItems, codeField = 'Code') => {
-    // Extract numbers from existing codes with this prefix
     const numbers = existingItems
       .map(item => {
         const code = item[codeField] || '';
-        // Match the last number in the code (e.g., PIL_001 -> 1, OBJ_L1_005 -> 5)
         const match = code.match(new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[_]*(\\d+)$`, 'i'));
         if (match) {
           return parseInt(match[1], 10);
         }
-        // Also try to match any trailing number
         const numMatch = code.match(/(\d+)$/);
         if (numMatch && code.startsWith(prefix)) {
           return parseInt(numMatch[1], 10);
@@ -137,61 +129,60 @@ export const StrategyProvider = ({ children }) => {
 
     const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
     const nextNum = maxNum + 1;
-    // Pad with zeros to 3 digits
     return `${prefix}_${String(nextNum).padStart(3, '0')}`;
   }, []);
 
-  // Load file
-  const loadFile = useCallback(async (path) => {
+  // Load file from ArrayBuffer (decrypted cloud file)
+  const loadFromBuffer = useCallback(async (arrayBuffer, displayName, storagePath) => {
     setIsLoading(true);
     isLoadingRef.current = true;
     try {
-      console.log('=== LOAD FILE CALLED ===');
-      console.log('LOAD - path:', path);
-      const result = await window.electronAPI.readStrategyFile(path);
-      console.log('LOAD - result.success:', result.success);
-      console.log('LOAD - teamMembers from file:', result.data?.teamMembers);
-      console.log('LOAD - teamMembers count:', result.data?.teamMembers?.length || 0);
-      console.log('LOAD - personalObjectives count:', result.data?.personalObjectives?.length || 0);
-      console.log('LOAD - employeeKpis count:', result.data?.employeeKpis?.length || 0);
-      if (result.success) {
-        setFilePath(path);
-        setVisionState(result.data.vision || { Statement: '', Statement_AR: '' });
-        setMissionState(result.data.mission || { Statement: '', Statement_AR: '' });
-        setPillars(result.data.pillars || []);
-        setPerspectives(result.data.perspectives || []);
-        setObjectives(result.data.objectives || []);
-        setBusinessUnits(result.data.businessUnits || []);
-        setKpis(result.data.kpis || []);
-        setObjectiveLinks(result.data.objectiveLinks || []);
-        setMapPositionsState(result.data.mapPositions || {});
-        setGlobalValues(result.data.globalValues || []);
-        setMeasures(result.data.measures || []);
-        setParameterValues(result.data.parameterValues || {});
-        setCalculatedValues(result.data.calculatedValues || {});
-        setAchievements(result.data.achievements || {});
-        // Team Members data
-        setTeamMembers(result.data.teamMembers || []);
-        setPersonalObjectives(result.data.personalObjectives || []);
-        setEmployeeKpis(result.data.employeeKpis || []);
-        setEmployeeAchievements(result.data.employeeAchievements || {});
-        setSettings(prev => ({ ...prev, ...(result.data.settings || {}) }));
-        setBuScorecardConfig(result.data.buScorecardConfig || {});
-        setHasUnsavedChanges(false);
-        await window.electronAPI.setLastFilePath(path);
-        // Clear loading ref after effects have had time to run
-        setTimeout(() => {
-          isLoadingRef.current = false;
-        }, 100);
-        return { success: true };
-      } else {
-        return { success: false, error: result.error };
-      }
+      const data = await fileService.readStrategyFile(arrayBuffer);
+
+      setFilePath(displayName);
+      setIsFromCloud(true);
+      setCloudStoragePath(storagePath);
+      setCurrentFileBuffer(arrayBuffer);
+
+      setVisionState(data.vision || { Statement: '', Statement_AR: '' });
+      setMissionState(data.mission || { Statement: '', Statement_AR: '' });
+      setPillars(data.pillars || []);
+      setPerspectives(data.perspectives || []);
+      setObjectives(data.objectives || []);
+      setBusinessUnits(data.businessUnits || []);
+      setKpis(data.kpis || []);
+      setObjectiveLinks(data.objectiveLinks || []);
+      setMapPositionsState(data.mapPositions || {});
+      setGlobalValues(data.globalValues || []);
+      setMeasures(data.measures || []);
+      setParameterValues(data.parameterValues || {});
+      setCalculatedValues(data.calculatedValues || {});
+      setAchievements(data.achievements || {});
+      setTeamMembers(data.teamMembers || []);
+      setPersonalObjectives(data.personalObjectives || []);
+      setEmployeeKpis(data.employeeKpis || []);
+      setEmployeeAchievements(data.employeeAchievements || {});
+      setSettings(prev => ({ ...prev, ...(data.settings || {}) }));
+      setBuScorecardConfig(data.buScorecardConfig || {});
+      setHasUnsavedChanges(false);
+
+      setTimeout(() => {
+        isLoadingRef.current = false;
+      }, 100);
+
+      return { success: true };
     } catch (error) {
+      console.error('Error loading file:', error);
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Legacy loadFile for compatibility - not used in web version
+  const loadFile = useCallback(async (path) => {
+    console.warn('loadFile called in web version - use loadFromBuffer instead');
+    return { success: false, error: 'Use loadFromBuffer in web version' };
   }, []);
 
   // Close file
@@ -199,6 +190,7 @@ export const StrategyProvider = ({ children }) => {
     setFilePath(null);
     setIsFromCloud(false);
     setCloudStoragePath(null);
+    setCurrentFileBuffer(null);
     setVisionState({ Statement: '', Statement_AR: '' });
     setMissionState({ Statement: '', Statement_AR: '' });
     setPillars([]);
@@ -213,7 +205,6 @@ export const StrategyProvider = ({ children }) => {
     setParameterValues({});
     setCalculatedValues({});
     setAchievements({});
-    // Team Members data
     setTeamMembers([]);
     setPersonalObjectives([]);
     setEmployeeKpis([]);
@@ -236,135 +227,88 @@ export const StrategyProvider = ({ children }) => {
     setHasUnsavedChanges(false);
   }, []);
 
-  // Save file
+  // Get current data object
+  const getCurrentData = useCallback(() => {
+    return {
+      vision,
+      mission,
+      pillars,
+      perspectives,
+      objectives,
+      businessUnits,
+      kpis,
+      objectiveLinks,
+      mapPositions,
+      globalValues,
+      measures,
+      parameterValues,
+      calculatedValues,
+      achievements,
+      teamMembers,
+      personalObjectives,
+      employeeKpis,
+      employeeAchievements,
+      settings,
+      buScorecardConfig
+    };
+  }, [vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
+
+  // Save file - returns encrypted buffer for cloud upload
   const saveFile = useCallback(async () => {
-    if (!filePath) return { success: false, error: 'No file path' };
-
     setIsSaving(true);
     try {
-      console.log('=== SAVE FILE CALLED ===');
-      console.log('SAVE - filePath:', filePath);
-      console.log('SAVE - teamMembers state:', teamMembers);
-      console.log('SAVE - teamMembers count:', teamMembers.length);
-      console.log('SAVE - personalObjectives count:', personalObjectives.length);
-      console.log('SAVE - employeeKpis count:', employeeKpis.length);
-      const data = {
-        vision,
-        mission,
-        pillars,
-        perspectives,
-        objectives,
-        businessUnits,
-        kpis,
-        objectiveLinks,
-        mapPositions,
-        globalValues,
-        measures,
-        parameterValues,
-        calculatedValues,
-        achievements,
-        // Team Members data
-        teamMembers,
-        personalObjectives,
-        employeeKpis,
-        employeeAchievements,
-        settings,
-        buScorecardConfig
-      };
-
-      const result = await window.electronAPI.saveStrategyFile(filePath, data);
-      if (result.success) {
-        setHasUnsavedChanges(false);
-      }
-      return result;
+      const data = getCurrentData();
+      const encryptedBuffer = await fileService.writeStrategyFile(data);
+      setCurrentFileBuffer(encryptedBuffer);
+      setHasUnsavedChanges(false);
+      return { success: true, buffer: encryptedBuffer };
     } catch (error) {
+      console.error('Error saving file:', error);
       return { success: false, error: error.message };
     } finally {
       setIsSaving(false);
     }
-  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
+  }, [getCurrentData]);
 
-  // Save file as (allows changing filename/extension)
+  // Save file as - same as saveFile for web version, returns buffer
   const saveFileAs = useCallback(async () => {
-    // Generate default name from current file or use generic name (without extension)
-    let defaultName = 'Strategy_Cascade';
-    if (filePath) {
-      const currentFileName = filePath.split(/[\\/]/).pop();
-      // Strip extension - the dialog handler will add .cpme
-      defaultName = currentFileName.replace(/\.(xlsx|xls|xlsm|cpme)$/i, '');
-    }
+    return await saveFile();
+  }, [saveFile]);
 
-    const newPath = await window.electronAPI.saveFileDialog(defaultName);
-    if (!newPath) return { success: false, cancelled: true };
-
-    setIsSaving(true);
-    try {
-      const data = {
-        vision,
-        mission,
-        pillars,
-        perspectives,
-        objectives,
-        businessUnits,
-        kpis,
-        objectiveLinks,
-        mapPositions,
-        globalValues,
-        measures,
-        parameterValues,
-        calculatedValues,
-        achievements,
-        teamMembers,
-        personalObjectives,
-        employeeKpis,
-        employeeAchievements,
-        settings,
-        buScorecardConfig
-      };
-
-      const result = await window.electronAPI.saveStrategyFile(newPath, data);
-      if (result.success) {
-        setFilePath(newPath);
-        setHasUnsavedChanges(false);
-        await window.electronAPI.setLastFilePath(newPath);
-        return { success: true, filePath: newPath };
-      }
-      return result;
-    } catch (error) {
-      return { success: false, error: error.message };
-    } finally {
-      setIsSaving(false);
-    }
-  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
-
-  // Create new file
-  const createNewFile = useCallback(async () => {
-    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade');
-    if (!path) return { success: false, cancelled: true };
-
+  // Create new file (in memory)
+  const createNewFile = useCallback(async (displayName = 'New Strategy') => {
     setIsLoading(true);
     try {
-      const result = await window.electronAPI.createNewStrategyFile(path);
-      if (result.success) {
-        setFilePath(path);
-        setVisionState({ Statement: '', Statement_AR: '' });
-        setMissionState({ Statement: '', Statement_AR: '' });
-        setPillars([]);
-        setPerspectives([]);
-        setObjectives([]);
-        setBusinessUnits([]);
-        setKpis([]);
-        setObjectiveLinks([]);
-        setMapPositionsState({});
-        setGlobalValues([]);
-        setMeasures([]);
-        setParameterValues({});
-        setCalculatedValues({});
-        setAchievements({});
-        setHasUnsavedChanges(false);
-        await window.electronAPI.setLastFilePath(path);
-      }
-      return result;
+      const emptyData = fileService.createNewStrategy();
+
+      setFilePath(displayName);
+      setIsFromCloud(false);
+      setCloudStoragePath(null);
+      setCurrentFileBuffer(null);
+
+      setVisionState(emptyData.vision);
+      setMissionState(emptyData.mission);
+      setPillars(emptyData.pillars);
+      setPerspectives(emptyData.perspectives);
+      setObjectives(emptyData.objectives);
+      setBusinessUnits(emptyData.businessUnits);
+      setKpis(emptyData.kpis);
+      setObjectiveLinks(emptyData.objectiveLinks);
+      setMapPositionsState(emptyData.mapPositions);
+      setGlobalValues(emptyData.globalValues);
+      setMeasures(emptyData.measures);
+      setParameterValues(emptyData.parameterValues);
+      setCalculatedValues(emptyData.calculatedValues);
+      setAchievements(emptyData.achievements);
+      setTeamMembers(emptyData.teamMembers);
+      setPersonalObjectives(emptyData.personalObjectives);
+      setEmployeeKpis(emptyData.employeeKpis);
+      setEmployeeAchievements(emptyData.employeeAchievements);
+      setSettings(prev => ({ ...prev, ...emptyData.settings }));
+      setBuScorecardConfig(emptyData.buScorecardConfig);
+      setHasUnsavedChanges(false);
+
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     } finally {
@@ -372,25 +316,11 @@ export const StrategyProvider = ({ children }) => {
     }
   }, []);
 
-  // Generate sample file
+  // Generate sample file - not available in web version
   const generateSampleFile = useCallback(async () => {
-    const path = await window.electronAPI.saveFileDialog('Strategy_Cascade_Sample');
-    if (!path) return { success: false, cancelled: true };
-
-    setIsLoading(true);
-    try {
-      const result = await window.electronAPI.generateSampleFile(path);
-      if (result.success) {
-        // Load the generated file
-        return await loadFile(path);
-      }
-      return result;
-    } catch (error) {
-      return { success: false, error: error.message };
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadFile]);
+    console.warn('generateSampleFile not available in web version');
+    return { success: false, error: 'Sample file generation not available in web version' };
+  }, []);
 
   // ============================================
   // VISION & MISSION
@@ -487,7 +417,6 @@ export const StrategyProvider = ({ children }) => {
     };
     setBusinessUnits(prev => [...prev, newBU]);
 
-    // Auto-create Operational objective for this BU
     const operationalObj = {
       Code: `OBJ_${newBU.Level}_OPERATIONAL_${newBU.Code}`,
       Name: 'Operational',
@@ -506,7 +435,7 @@ export const StrategyProvider = ({ children }) => {
 
     setHasUnsavedChanges(true);
     return newBU;
-  }, [businessUnits, generateIncrementalId]);
+  }, []);
 
   const updateBusinessUnit = useCallback((code, updates) => {
     setBusinessUnits(prev => prev.map(bu => bu.Code === code ? { ...bu, ...updates } : bu));
@@ -514,7 +443,6 @@ export const StrategyProvider = ({ children }) => {
   }, []);
 
   const deleteBusinessUnit = useCallback((code) => {
-    // Also delete the auto-generated Operational objective
     setObjectives(prev => prev.filter(obj =>
       !(obj.Is_Operational && obj.Business_Unit_Code === code)
     ));
@@ -557,12 +485,10 @@ export const StrategyProvider = ({ children }) => {
     let prefix = `OBJ_${level}`;
     let relevantObjectives = objectives.filter(o => o.Level === level && !o.Is_Operational);
 
-    // For L2/L3, include BU abbreviation in the code
     if ((level === 'L2' || level === 'L3') && objective.Business_Unit_Code) {
       const bu = businessUnits.find(b => b.Code === objective.Business_Unit_Code);
       if (bu?.Abbreviation) {
         prefix = `OBJ_${level}_${bu.Abbreviation}`;
-        // Filter by this BU for numbering
         relevantObjectives = objectives.filter(o =>
           o.Level === level &&
           o.Business_Unit_Code === objective.Business_Unit_Code &&
@@ -611,7 +537,6 @@ export const StrategyProvider = ({ children }) => {
       return { success: false, error: 'Cannot archive Operational objective' };
     }
 
-    // Check for linked KPIs
     const linkedKPIs = kpis.filter(kpi => kpi.Objective_Code === code);
     if (linkedKPIs.length > 0) {
       return {
@@ -639,7 +564,6 @@ export const StrategyProvider = ({ children }) => {
   }, [objectives]);
 
   const getObjectivesForKPIDropdown = useCallback((buCode, level) => {
-    // Get objectives for this BU at this level
     return objectives.filter(obj =>
       obj.Business_Unit_Code === buCode &&
       obj.Level === level &&
@@ -652,10 +576,8 @@ export const StrategyProvider = ({ children }) => {
   // ============================================
 
   const addKPI = useCallback((kpi) => {
-    // Determine the BU from the Objective (KPIs are linked to Objectives, which are linked to BUs)
     let buCode = kpi.Business_Unit || kpi.Business_Unit_Code || '';
 
-    // If no BU code but we have an Objective, get BU from the Objective
     if (!buCode && kpi.Objective_Code) {
       const objective = objectives.find(o => o.Code === kpi.Objective_Code);
       buCode = objective?.Business_Unit_Code || '';
@@ -670,7 +592,6 @@ export const StrategyProvider = ({ children }) => {
 
     if (buAbbr) {
       prefix = `KPI_${buLevel}_${buAbbr}`;
-      // Filter KPIs by this BU for numbering
       relevantKpis = kpis.filter(k => k.Business_Unit_Code === buCode || k.Business_Unit === buCode);
     }
 
@@ -720,10 +641,8 @@ export const StrategyProvider = ({ children }) => {
   }, []);
 
   const retireKPI = useCallback(async (code) => {
-    const confirmed = await window.electronAPI.showConfirmDialog(
-      'Retire KPI',
-      'Are you sure you want to retire this KPI?'
-    );
+    // Use browser confirm instead of Electron dialog
+    const confirmed = window.confirm('Are you sure you want to retire this KPI?');
     if (confirmed) {
       setKpis(prev => prev.map(kpi =>
         kpi.Code === code ? { ...kpi, Review_Status: 'Retired' } : kpi
@@ -763,7 +682,6 @@ export const StrategyProvider = ({ children }) => {
   // ============================================
 
   const addObjectiveLink = useCallback((fromCode, toCode, fromSide = null, toSide = null) => {
-    // Check if link already exists
     const exists = objectiveLinks.some(
       link => link.From_Code === fromCode && link.To_Code === toCode
     );
@@ -774,7 +692,7 @@ export const StrategyProvider = ({ children }) => {
       To_Code: toCode,
       From_Side: fromSide,
       To_Side: toSide,
-      Waypoints: '' // JSON string of waypoints array
+      Waypoints: ''
     };
     setObjectiveLinks(prev => [...prev, newLink]);
     setHasUnsavedChanges(true);
@@ -836,7 +754,7 @@ export const StrategyProvider = ({ children }) => {
       Code: gv.Code || generateIncrementalId('GV', globalValues),
       Name: gv.Name || '',
       Name_AR: gv.Name_AR || '',
-      Type: gv.Type || 'number', // number, percentage, currency
+      Type: gv.Type || 'number',
       Description: gv.Description || '',
       Monthly_Values: gv.Monthly_Values || {},
       Status: 'Active'
@@ -909,7 +827,7 @@ export const StrategyProvider = ({ children }) => {
   }, [measures]);
 
   // ============================================
-  // PARAMETER VALUES (Monthly data entry for measure parameters)
+  // PARAMETER VALUES
   // ============================================
 
   const setParameterValue = useCallback((measureCode, paramName, monthKey, value) => {
@@ -935,19 +853,16 @@ export const StrategyProvider = ({ children }) => {
     return result;
   }, [parameterValues]);
 
-  // Update calculated values (called from DataEntryView after calculation)
   const updateCalculatedValues = useCallback((newCalculatedValues) => {
     setCalculatedValues(newCalculatedValues);
     setHasUnsavedChanges(true);
   }, []);
 
-  // Update achievements (called from DataEntryView after calculation)
   const updateAchievements = useCallback((newAchievements) => {
     setAchievements(newAchievements);
     setHasUnsavedChanges(true);
   }, []);
 
-  // Update admin settings
   const updateSettings = useCallback((newSettings) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
     setHasUnsavedChanges(true);
@@ -957,9 +872,6 @@ export const StrategyProvider = ({ children }) => {
   // BU SCORECARD CONFIG
   // ============================================
 
-  // Set the weight a BU assigns to a parent objective
-  // For L2 BUs: parentObjCode is an SO (L1 Objective)
-  // For L3 BUs: parentObjCode is an L2 Objective
   const setBuParentWeight = useCallback((buCode, parentObjCode, weight) => {
     setBuScorecardConfig(prev => ({
       ...prev,
@@ -971,7 +883,6 @@ export const StrategyProvider = ({ children }) => {
     setHasUnsavedChanges(true);
   }, []);
 
-  // Remove a parent objective from a BU's scorecard
   const removeBuParentWeight = useCallback((buCode, parentObjCode) => {
     setBuScorecardConfig(prev => {
       const newConfig = { ...prev };
@@ -987,12 +898,10 @@ export const StrategyProvider = ({ children }) => {
     setHasUnsavedChanges(true);
   }, []);
 
-  // Get all parent objective weights for a BU
   const getBuParentWeights = useCallback((buCode) => {
     return buScorecardConfig[buCode] || {};
   }, [buScorecardConfig]);
 
-  // Get total weight assigned to parent objectives for a BU
   const getBuTotalParentWeight = useCallback((buCode) => {
     const weights = buScorecardConfig[buCode] || {};
     return Object.values(weights).reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
@@ -1002,8 +911,6 @@ export const StrategyProvider = ({ children }) => {
   // WEIGHT VALIDATION HELPERS
   // ============================================
 
-  // Validate L1 weights: Pillars → SOs → KPIs
-  // Returns: { pillarCode: { pillarWeight, soTotalWeight, isValid, sos: { soCode: { soWeight, kpiTotalWeight, isValid } } } }
   const validateL1Weights = useCallback(() => {
     const result = {};
     const l1Objectives = objectives.filter(o => o.Level === 'L1' && o.Status === 'Active' && !o.Is_Operational);
@@ -1034,8 +941,6 @@ export const StrategyProvider = ({ children }) => {
     return result;
   }, [pillars, objectives, kpis]);
 
-  // Validate L2 weights for a specific BU: Parent SOs → L2 Objs → KPIs
-  // Returns: { soCode: { soWeight, objTotalWeight, isValid, objectives: { objCode: { objWeight, kpiTotalWeight, isValid } } } }
   const validateL2Weights = useCallback((buCode) => {
     const result = {};
     const buParentWeights = buScorecardConfig[buCode] || {};
@@ -1046,7 +951,6 @@ export const StrategyProvider = ({ children }) => {
       !o.Is_Operational
     );
 
-    // Group L2 objectives by their parent SO
     Object.entries(buParentWeights).forEach(([soCode, soWeight]) => {
       const soObjectives = l2Objectives.filter(o => o.Parent_Objective_Code === soCode);
       const objTotalWeight = soObjectives.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
@@ -1073,7 +977,6 @@ export const StrategyProvider = ({ children }) => {
     return result;
   }, [buScorecardConfig, objectives, kpis]);
 
-  // Validate L3 weights for a specific BU: Parent L2 Objs → L3 Objs → KPIs
   const validateL3Weights = useCallback((buCode) => {
     const result = {};
     const buParentWeights = buScorecardConfig[buCode] || {};
@@ -1084,7 +987,6 @@ export const StrategyProvider = ({ children }) => {
       !o.Is_Operational
     );
 
-    // Group L3 objectives by their parent L2 objective
     Object.entries(buParentWeights).forEach(([l2ObjCode, l2ObjWeight]) => {
       const l3Objs = l3Objectives.filter(o => o.Parent_Objective_Code === l2ObjCode);
       const objTotalWeight = l3Objs.reduce((sum, obj) => sum + (parseFloat(obj.Weight) || 0), 0);
@@ -1111,9 +1013,6 @@ export const StrategyProvider = ({ children }) => {
     return result;
   }, [buScorecardConfig, objectives, kpis]);
 
-  // Get available parent objectives for a BU to add to its scorecard
-  // For L2 BU: returns L1 Objectives (SOs) not yet in scorecard
-  // For L3 BU: returns L2 Objectives from parent L2 BU not yet in scorecard
   const getAvailableParentObjectives = useCallback((buCode) => {
     const bu = businessUnits.find(b => b.Code === buCode);
     if (!bu) return [];
@@ -1122,7 +1021,6 @@ export const StrategyProvider = ({ children }) => {
     const assignedCodes = Object.keys(currentWeights);
 
     if (bu.Level === 'L2') {
-      // Return L1 Objectives (SOs) that aren't already assigned
       return objectives.filter(o =>
         o.Level === 'L1' &&
         o.Status === 'Active' &&
@@ -1130,7 +1028,6 @@ export const StrategyProvider = ({ children }) => {
         !assignedCodes.includes(o.Code)
       );
     } else if (bu.Level === 'L3') {
-      // Return L2 Objectives from parent L2 BU that aren't already assigned
       const parentL2BU = bu.Parent_Code;
       return objectives.filter(o =>
         o.Level === 'L2' &&
@@ -1144,20 +1041,16 @@ export const StrategyProvider = ({ children }) => {
     return [];
   }, [businessUnits, objectives, buScorecardConfig]);
 
-  // Initialize BU Scorecard Config with parent objectives that have children
-  // For L2 BU: Auto-add SOs that have L2 objectives under this BU, using actual weight sums, plus Operational
-  // For L3 BU: Auto-add L2 objectives that have L3 objectives under this BU, using actual weight sums, plus Operational
   const initializeBuScorecardConfig = useCallback((buCode) => {
     const bu = businessUnits.find(b => b.Code === buCode);
     if (!bu) return;
 
     const currentConfig = buScorecardConfig[buCode] || {};
-    if (Object.keys(currentConfig).length > 0) return; // Already configured
+    if (Object.keys(currentConfig).length > 0) return;
 
     const newConfig = {};
 
     if (bu.Level === 'L2') {
-      // Find L2 objectives for this BU and their parent SOs
       const buL2Objectives = objectives.filter(o =>
         o.Level === 'L2' &&
         o.Business_Unit_Code === buCode &&
@@ -1165,7 +1058,6 @@ export const StrategyProvider = ({ children }) => {
         !o.Is_Operational
       );
 
-      // Group L2 objectives by parent SO and sum their weights
       const soWeightSums = {};
       buL2Objectives.forEach(obj => {
         if (obj.Parent_Objective_Code) {
@@ -1176,12 +1068,10 @@ export const StrategyProvider = ({ children }) => {
         }
       });
 
-      // Use actual weight sums from L2 objectives
       Object.entries(soWeightSums).forEach(([soCode, weightSum]) => {
         newConfig[soCode] = Math.round(weightSum * 10) / 10;
       });
 
-      // Always add Operational with its KPI weight sum
       const operationalObj = objectives.find(o =>
         o.Level === 'L2' &&
         o.Business_Unit_Code === buCode &&
@@ -1194,7 +1084,6 @@ export const StrategyProvider = ({ children }) => {
         newConfig[operationalObj.Code] = Math.round(operationalWeight * 10) / 10;
       }
     } else if (bu.Level === 'L3') {
-      // Find L3 objectives for this BU and their parent L2 objectives
       const buL3Objectives = objectives.filter(o =>
         o.Level === 'L3' &&
         o.Business_Unit_Code === buCode &&
@@ -1202,7 +1091,6 @@ export const StrategyProvider = ({ children }) => {
         !o.Is_Operational
       );
 
-      // Group L3 objectives by parent L2 and sum their weights
       const l2WeightSums = {};
       buL3Objectives.forEach(obj => {
         if (obj.Parent_Objective_Code) {
@@ -1213,12 +1101,10 @@ export const StrategyProvider = ({ children }) => {
         }
       });
 
-      // Use actual weight sums from L3 objectives
       Object.entries(l2WeightSums).forEach(([l2Code, weightSum]) => {
         newConfig[l2Code] = Math.round(weightSum * 10) / 10;
       });
 
-      // Always add Operational with its KPI weight sum
       const operationalObj = objectives.find(o =>
         o.Level === 'L3' &&
         o.Business_Unit_Code === buCode &&
@@ -1239,7 +1125,7 @@ export const StrategyProvider = ({ children }) => {
       }));
       setHasUnsavedChanges(true);
     }
-  }, [businessUnits, objectives, buScorecardConfig]);
+  }, [businessUnits, objectives, buScorecardConfig, kpis]);
 
   // ============================================
   // TEAM MEMBERS
@@ -1271,12 +1157,10 @@ export const StrategyProvider = ({ children }) => {
   }, []);
 
   const deleteTeamMember = useCallback((code) => {
-    // Check for dependent personal objectives
     const hasObjectives = personalObjectives.some(o => o.Employee_Code === code);
     if (hasObjectives) {
       return { success: false, error: 'Cannot delete employee with personal objectives' };
     }
-    // Check for direct reports
     const hasReports = teamMembers.some(m => m.Reports_To === code);
     if (hasReports) {
       return { success: false, error: 'Cannot delete employee with direct reports' };
@@ -1302,11 +1186,9 @@ export const StrategyProvider = ({ children }) => {
   }, [teamMembers]);
 
   const getTeamMemberTree = useCallback(() => {
-    // Build tree structure grouped by BU, then by reporting hierarchy
     const tree = {};
     const activeMembers = teamMembers.filter(m => m.Status === 'Active');
 
-    // Group by BU first
     activeMembers.forEach(member => {
       const buCode = member.Business_Unit_Code || 'unassigned';
       if (!tree[buCode]) {
@@ -1350,7 +1232,6 @@ export const StrategyProvider = ({ children }) => {
   }, []);
 
   const deletePersonalObjective = useCallback((code) => {
-    // Check for linked employee KPIs
     const hasKPIs = employeeKpis.some(k => k.Personal_Objective_Code === code);
     if (hasKPIs) {
       return { success: false, error: 'Cannot delete objective with linked KPIs' };
@@ -1400,7 +1281,6 @@ export const StrategyProvider = ({ children }) => {
 
   const deleteEmployeeKPI = useCallback((code) => {
     setEmployeeKpis(prev => prev.filter(k => k.Code !== code));
-    // Also clean up achievements
     setEmployeeAchievements(prev => {
       const newAchievements = { ...prev };
       delete newAchievements[code];
@@ -1417,7 +1297,6 @@ export const StrategyProvider = ({ children }) => {
     return employeeKpis.filter(k => k.Employee_Code === empCode && k.Status === 'Active');
   }, [employeeKpis]);
 
-  // Update employee achievements
   const updateEmployeeAchievements = useCallback((newAchievements) => {
     setEmployeeAchievements(newAchievements);
     setHasUnsavedChanges(true);
@@ -1464,6 +1343,7 @@ export const StrategyProvider = ({ children }) => {
     isFromCloud,
     cloudStoragePath,
     markAsFromCloud,
+    currentFileBuffer,
 
     // Data
     vision,
@@ -1489,11 +1369,13 @@ export const StrategyProvider = ({ children }) => {
 
     // File operations
     loadFile,
+    loadFromBuffer,
     saveFile,
     saveFileAs,
     closeFile,
     createNewFile,
     generateSampleFile,
+    getCurrentData,
 
     // Vision & Mission
     setVision,

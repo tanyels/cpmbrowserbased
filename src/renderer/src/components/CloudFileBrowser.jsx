@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useCloud } from '../contexts/CloudContext';
 import { useStrategy } from '../contexts/StrategyContext';
+import { fileService } from '../services/fileService';
+import { cryptoService } from '../services/cryptoService';
 import {
   Cloud, Upload, Download, Trash2, RefreshCw,
   FileText, Clock, HardDrive, AlertCircle, Check,
-  Key, Loader, Edit2, X, FolderOpen, LogOut, Lock, ExternalLink
+  Key, Loader, Edit2, X, FolderOpen, LogOut, ExternalLink
 } from 'lucide-react';
 
 function CloudFileBrowser({ onFileOpened }) {
@@ -28,7 +30,7 @@ function CloudFileBrowser({ onFileOpened }) {
     clearError
   } = useCloud();
 
-  const { filePath, hasUnsavedChanges, saveFile, saveFileAs, loadFile, markAsFromCloud } = useStrategy();
+  const { filePath, hasUnsavedChanges, saveFile, loadFromBuffer, markAsFromCloud } = useStrategy();
 
   const [accessKeyInput, setAccessKeyInput] = useState('');
   const [keyLoading, setKeyLoading] = useState(false);
@@ -39,6 +41,8 @@ function CloudFileBrowser({ onFileOpened }) {
   const [actionLoading, setActionLoading] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [localError, setLocalError] = useState('');
+
+  const fileInputRef = useRef(null);
 
   // Clear messages after a delay
   useEffect(() => {
@@ -65,11 +69,7 @@ function CloudFileBrowser({ onFileOpened }) {
   // Format access key as user types (xxxx-xxxx-xxxx-xxxx)
   const handleKeyInputChange = (e) => {
     let value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-
-    // Remove existing dashes for reformatting
     const cleaned = value.replace(/-/g, '');
-
-    // Add dashes at appropriate positions
     let formatted = '';
     for (let i = 0; i < cleaned.length && i < 16; i++) {
       if (i > 0 && i % 4 === 0) {
@@ -77,7 +77,6 @@ function CloudFileBrowser({ onFileOpened }) {
       }
       formatted += cleaned[i];
     }
-
     setAccessKeyInput(formatted);
   };
 
@@ -106,10 +105,6 @@ function CloudFileBrowser({ onFileOpened }) {
           <AlertCircle size={48} />
           <h3>Cloud Not Configured</h3>
           <p>Cloud storage has not been configured for this application.</p>
-          <p className="cloud-config-hint">
-            To enable cloud features, update the Supabase configuration in
-            <code>src/main/supabaseConfig.js</code>
-          </p>
         </div>
       </div>
     );
@@ -205,14 +200,10 @@ function CloudFileBrowser({ onFileOpened }) {
     return expires.toLocaleDateString();
   };
 
+  // Handle file upload from current session
   const handleUploadCurrent = async () => {
     if (!filePath) {
       setLocalError('No file is currently open');
-      return;
-    }
-
-    if (!filePath.endsWith('.cpme')) {
-      setLocalError('Only encrypted .cpme files can be uploaded. Use "Save As" to save your file as .cpme first.');
       return;
     }
 
@@ -227,8 +218,14 @@ function CloudFileBrowser({ onFileOpened }) {
     clearError();
 
     try {
-      const fileName = filePath.split('/').pop().split('\\').pop();
-      await uploadFile(filePath, fileName.replace('.cpme', ''));
+      // Get the current file buffer from saveFile
+      const result = await saveFile();
+      if (!result.success || !result.buffer) {
+        throw new Error(result.error || 'Failed to save file');
+      }
+
+      const displayName = filePath.replace(/\.cpme$/, '');
+      await uploadFile(result.buffer, displayName);
       setSuccessMessage('File uploaded successfully!');
     } catch (err) {
       setLocalError(err.message);
@@ -237,65 +234,60 @@ function CloudFileBrowser({ onFileOpened }) {
     }
   };
 
-  const handleEncryptAndInitialize = async () => {
-    setActionLoading('encrypt');
+  // Handle file selection from input
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActionLoading('upload');
     clearError();
-    setLocalError('');
 
     try {
-      // Open file dialog to select xlsx
-      const selectedPath = await window.electronAPI.openFileDialog();
-      if (!selectedPath) {
-        // User cancelled
-        setActionLoading(null);
-        return;
-      }
+      const arrayBuffer = await file.arrayBuffer();
 
-      // Check if selected file is xlsx
-      if (selectedPath.endsWith('.cpme')) {
-        setLocalError('Selected file is already encrypted. Please select an .xlsx file.');
-        setActionLoading(null);
-        return;
-      }
-
-      // Convert and upload directly (saves to temp, uploads, no local save needed)
-      const result = await window.electronAPI.cloud.convertAndUpload(selectedPath);
-      if (result.success) {
-        setSuccessMessage('File encrypted and uploaded successfully!');
-        await refreshFiles();
-        await refreshKeyStatus();
+      // Check if it's a .cpme file (already encrypted)
+      if (file.name.endsWith('.cpme')) {
+        // Upload directly
+        const displayName = file.name.replace(/\.cpme$/, '');
+        await uploadFile(arrayBuffer, displayName);
+        setSuccessMessage('File uploaded successfully!');
+      } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Need to encrypt first - this is complex, skip for now
+        setLocalError('Please upload .cpme files only. Use the app to create and save strategy files.');
       } else {
-        setLocalError(result.error || 'Failed to convert and upload file');
+        setLocalError('Please select a .cpme file');
       }
     } catch (err) {
       setLocalError(err.message);
     } finally {
       setActionLoading(null);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
+  // Download file to browser
   const handleDownload = async (file) => {
     setActionLoading(file.id);
     clearError();
 
     try {
-      // Ask where to save
-      const result = await window.electronAPI.saveFileDialog(file.display_name + '.cpme');
-      if (!result || result.canceled) {
-        setActionLoading(null);
-        return;
-      }
+      const arrayBuffer = await downloadFile(file.storage_path);
 
-      await downloadFile(file.storage_path, result.filePath);
+      // Create blob and download
+      const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${file.display_name}.cpme`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
       setSuccessMessage(`Downloaded: ${file.display_name}`);
-
-      // Ask if they want to open the file
-      const shouldOpen = window.confirm('File downloaded. Would you like to open it now?');
-      if (shouldOpen) {
-        if (onFileOpened) {
-          onFileOpened(result.filePath);
-        }
-      }
     } catch (err) {
       setLocalError(err.message);
     } finally {
@@ -303,24 +295,22 @@ function CloudFileBrowser({ onFileOpened }) {
     }
   };
 
+  // Open file in app
   const handleOpenInApp = async (file) => {
     setActionLoading(file.id);
     clearError();
 
     try {
-      console.log('=== OPEN IN APP ===');
-      console.log('file.storage_path:', file.storage_path);
-      // Download to temp location and open
-      const result = await window.electronAPI.cloud.downloadAndOpen(file.storage_path, file.display_name);
-      console.log('downloadAndOpen result:', result);
+      // Download the encrypted file
+      const arrayBuffer = await downloadFile(file.storage_path);
+
+      // Load into the app
+      const result = await loadFromBuffer(arrayBuffer, file.display_name, file.storage_path);
+
       if (result.success) {
         setSuccessMessage(`Opened: ${file.display_name}`);
-        // Mark as from cloud so we can track it
-        console.log('Calling markAsFromCloud with:', file.storage_path);
-        markAsFromCloud(file.storage_path);
         if (onFileOpened) {
-          console.log('Calling onFileOpened with:', result.filePath);
-          onFileOpened(result.filePath);
+          onFileOpened(file.display_name);
         }
       } else {
         setLocalError(result.error || 'Failed to open file');
@@ -397,6 +387,15 @@ function CloudFileBrowser({ onFileOpened }) {
 
   return (
     <div className="cloud-browser">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept=".cpme"
+        onChange={handleFileSelect}
+      />
+
       {/* Header */}
       <div className="cloud-browser-header">
         <div className="cloud-user-info">
@@ -467,21 +466,17 @@ function CloudFileBrowser({ onFileOpened }) {
       {/* Upload Section */}
       <div className="cloud-upload-section">
         <h3>Upload to Cloud</h3>
-        <div className="cloud-security-notice">
-          <AlertCircle size={14} />
-          <span>For security, only encrypted .cpme files can be uploaded to cloud storage.</span>
-        </div>
         <p className="cloud-upload-hint">
           {filePath
-            ? `Current file: ${filePath.split('/').pop().split('\\').pop()}${!filePath.endsWith('.cpme') ? ' (needs encryption)' : ''}`
-            : 'Open a .cpme file to upload it to the cloud'
+            ? `Current file: ${filePath}`
+            : 'Create a new strategy or select a .cpme file to upload'
           }
         </p>
         <div className="cloud-upload-buttons">
           <button
             className="btn btn-primary"
             onClick={handleUploadCurrent}
-            disabled={!filePath || !filePath.endsWith('.cpme') || uploading || actionLoading || !isOnline}
+            disabled={!filePath || uploading || actionLoading || !isOnline}
           >
             {uploading || actionLoading === 'upload' ? (
               <><Loader size={16} className="spinner" /> Uploading...</>
@@ -491,19 +486,12 @@ function CloudFileBrowser({ onFileOpened }) {
           </button>
           <button
             className="btn btn-secondary"
-            onClick={handleEncryptAndInitialize}
-            disabled={(filePath && filePath.endsWith('.cpme')) || uploading || actionLoading || !isOnline}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || actionLoading || !isOnline}
           >
-            {actionLoading === 'encrypt' ? (
-              <><Loader size={16} className="spinner" /> Encrypting...</>
-            ) : (
-              <><Lock size={16} /> Encrypt & Initialize</>
-            )}
+            <Upload size={16} /> Upload .cpme File
           </button>
         </div>
-        <p className="cloud-encrypt-note">
-          To upload an .xlsx file, click "Encrypt & Initialize" to select, encrypt, and upload it to cloud.
-        </p>
       </div>
 
       {/* File List */}
@@ -523,7 +511,7 @@ function CloudFileBrowser({ onFileOpened }) {
           <div className="cloud-empty-files">
             <FileText size={32} />
             <p>No files in the cloud yet</p>
-            <p className="hint">Upload your first .cpme file to get started</p>
+            <p className="hint">Create a new strategy and save it to the cloud</p>
           </div>
         ) : (
           <div className="cloud-file-list">

@@ -86,8 +86,7 @@ function KPIDetail() {
   };
 
   const handleRetire = async () => {
-    const confirmed = await window.electronAPI.showConfirmDialog(
-      'Retire KPI',
+    const confirmed = window.confirm(
       `Are you sure you want to retire "${kpiName}"?\n\nThis KPI will be excluded from the next year's scorecard.`
     );
 
