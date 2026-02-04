@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useStrategy } from '../../contexts/StrategyContext';
 import { useLicense } from '../../contexts/LicenseContext';
 import { AlertTriangle } from 'lucide-react';
@@ -12,13 +12,9 @@ function DashboardTab() {
     objectives,
     businessUnits,
     kpis,
-    getStats,
-    exportReport
+    getStats
   } = useStrategy();
   const { getCompanyInfo } = useLicense();
-
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportMessage, setExportMessage] = useState(null);
 
   const stats = useMemo(() => getStats(), [getStats]);
   const companyInfo = getCompanyInfo();
@@ -106,24 +102,6 @@ function DashboardTab() {
     };
   }, [kpis]);
 
-  // Handle export
-  const handleExport = async () => {
-    setIsExporting(true);
-    setExportMessage(null);
-    try {
-      const result = await exportReport();
-      if (result.success) {
-        setExportMessage({ type: 'success', text: 'Report exported successfully!' });
-      } else if (!result.cancelled) {
-        setExportMessage({ type: 'error', text: result.error || 'Export failed' });
-      }
-    } catch (error) {
-      setExportMessage({ type: 'error', text: error.message });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   return (
     <div className="dashboard-tab">
       {/* Company Branding Banner */}
@@ -149,22 +127,7 @@ function DashboardTab() {
           <h2>Strategy Dashboard</h2>
           <p className="section-description">Overview of your strategy cascade structure and KPI coverage</p>
         </div>
-        <div className="dashboard-actions">
-          <button
-            className="btn btn-primary"
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? 'Exporting...' : 'Export Full Report'}
-          </button>
-        </div>
       </div>
-
-      {exportMessage && (
-        <div className={`message ${exportMessage.type}`}>
-          {exportMessage.text}
-        </div>
-      )}
 
       {/* Vision & Mission Summary */}
       <div className="dashboard-section">

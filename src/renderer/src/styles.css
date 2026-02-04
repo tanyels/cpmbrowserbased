@@ -186,7 +186,7 @@ body {
 /* ====== Landing Page Styles ====== */
 .landing-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #ffffff;
   overflow-x: hidden;
 }
 
@@ -238,6 +238,13 @@ body {
   color: var(--gray-900);
   margin: 0;
   line-height: 1.1;
+}
+
+.hero-founded {
+  font-size: 14px;
+  color: var(--gray-500);
+  margin: 4px 0 12px;
+  font-style: italic;
 }
 
 .hero-subtitle {
@@ -510,7 +517,7 @@ body {
 
 /* Features Section */
 .landing-features {
-  background: var(--white);
+  background: #1e3a5f;
   padding: 80px 40px;
 }
 
@@ -518,7 +525,7 @@ body {
   text-align: center;
   font-size: 28px;
   font-weight: 700;
-  color: var(--gray-900);
+  color: #ffffff;
   margin: 0 0 48px 0;
 }
 
@@ -531,15 +538,17 @@ body {
 }
 
 .feature-card {
-  background: var(--gray-50);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   padding: 24px;
   transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .feature-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .feature-card-header {
@@ -552,7 +561,7 @@ body {
 .feature-card-icon {
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, #4472C4 0%, #365899 100%);
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -564,7 +573,7 @@ body {
 .feature-card h3 {
   font-size: 17px;
   font-weight: 700;
-  color: var(--gray-900);
+  color: #ffffff;
   margin: 0;
 }
 
@@ -576,7 +585,7 @@ body {
 
 .feature-card li {
   font-size: 14px;
-  color: var(--gray-600);
+  color: rgba(255, 255, 255, 0.85);
   padding: 6px 0;
   padding-left: 20px;
   position: relative;
@@ -586,7 +595,7 @@ body {
   content: '✓';
   position: absolute;
   left: 0;
-  color: var(--primary);
+  color: #60a5fa;
   font-weight: bold;
   font-size: 12px;
 }
@@ -595,13 +604,13 @@ body {
 .landing-footer {
   text-align: center;
   padding: 24px 40px;
-  background: var(--gray-100);
-  border-top: 1px solid var(--gray-200);
+  background: #152238;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .landing-footer p {
   font-size: 13px;
-  color: var(--gray-500);
+  color: rgba(255, 255, 255, 0.6);
   margin: 0;
 }
 
@@ -1407,6 +1416,16 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.cloud-btn-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cloud-btn-header svg {
+  color: var(--primary);
 }
 
 /* Company branding in header */
@@ -6603,6 +6622,58 @@ body {
   flex-direction: column;
 }
 
+/* Download Warning Modal */
+.download-warning-modal {
+  max-width: 480px;
+  padding: 24px;
+}
+
+.download-warning-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: none;
+  margin-bottom: 16px;
+}
+
+.download-warning-modal .modal-header .warning-icon {
+  color: #f59e0b;
+}
+
+.download-warning-modal .modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.download-warning-modal .modal-body {
+  padding: 0;
+  margin-bottom: 24px;
+}
+
+.download-warning-modal .modal-body p {
+  margin: 0 0 8px;
+  color: var(--gray-600);
+}
+
+.download-warning-modal .modal-body p strong {
+  color: var(--gray-800);
+}
+
+.download-warning-modal .modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.download-warning-modal .modal-actions .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -10847,6 +10918,857 @@ body {
   text-decoration: underline;
 }
 
+/* ============================================
+   CLOUD STORAGE STYLES
+   ============================================ */
+
+/* Cloud Auth Screen */
+.cloud-auth-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 40px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%);
+}
+
+.cloud-auth-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 420px;
+  width: 100%;
+  position: relative;
+}
+
+.cloud-auth-back {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--gray-500);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+}
+
+.cloud-auth-back:hover {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.cloud-auth-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.cloud-auth-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: white;
+}
+
+.cloud-auth-icon.offline {
+  background: linear-gradient(135deg, var(--gray-400) 0%, var(--gray-500) 100%);
+}
+
+.cloud-auth-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gray-800);
+  margin-bottom: 8px;
+}
+
+.cloud-auth-header p {
+  color: var(--gray-500);
+  font-size: 14px;
+  margin: 0;
+}
+
+.cloud-auth-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.cloud-auth-message.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.cloud-auth-message.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.cloud-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cloud-auth-field {
+  text-align: left;
+}
+
+.cloud-auth-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.cloud-auth-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  background: var(--white);
+  transition: border-color 0.15s;
+}
+
+.cloud-auth-input-wrapper:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(68, 114, 196, 0.1);
+}
+
+.cloud-auth-input-wrapper svg {
+  color: var(--gray-400);
+  flex-shrink: 0;
+}
+
+.cloud-auth-input-wrapper input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: var(--gray-800);
+  outline: none;
+}
+
+.cloud-auth-input-wrapper input::placeholder {
+  color: var(--gray-400);
+}
+
+.cloud-auth-submit {
+  margin-top: 8px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cloud-auth-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* Cloud File Browser */
+.cloud-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--gray-50);
+}
+
+.cloud-not-configured {
+  align-items: center;
+  justify-content: center;
+}
+
+.cloud-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.cloud-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gray-700);
+}
+
+.cloud-user-info svg {
+  color: var(--primary);
+}
+
+.cloud-user-email {
+  font-weight: 500;
+}
+
+.cloud-offline-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--gray-200);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--gray-600);
+}
+
+.cloud-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cloud-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-size: 13px;
+}
+
+.cloud-message.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.cloud-message.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.cloud-message button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.cloud-message button:hover {
+  opacity: 1;
+}
+
+.cloud-upload-section {
+  padding: 24px;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.cloud-security-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: #856404;
+}
+
+.cloud-security-notice svg {
+  flex-shrink: 0;
+  color: #856404;
+}
+
+.cloud-upload-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cloud-upload-buttons .btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cloud-encrypt-note {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-style: italic;
+  margin: 0;
+}
+
+.cloud-upload-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 8px;
+}
+
+.cloud-upload-hint {
+  font-size: 13px;
+  color: var(--gray-500);
+  margin-bottom: 12px;
+}
+
+.cloud-files-section {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.cloud-files-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 16px;
+}
+
+.cloud-file-count {
+  background: var(--gray-200);
+  color: var(--gray-600);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cloud-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px;
+  color: var(--gray-500);
+}
+
+.cloud-empty-files,
+.cloud-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: var(--gray-400);
+  text-align: center;
+}
+
+.cloud-empty-files svg,
+.cloud-empty-state svg {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.cloud-empty-files p,
+.cloud-empty-state h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--gray-500);
+}
+
+.cloud-empty-files .hint,
+.cloud-empty-state p {
+  font-size: 13px;
+  color: var(--gray-400);
+  margin-top: 4px;
+}
+
+.cloud-config-hint {
+  margin-top: 16px;
+  font-size: 12px;
+}
+
+.cloud-config-hint code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--gray-100);
+  border-radius: var(--radius);
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.cloud-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cloud-file-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cloud-file-item:hover {
+  border-color: var(--primary);
+}
+
+.cloud-file-item.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(68, 114, 196, 0.1);
+}
+
+.cloud-file-icon {
+  color: var(--primary);
+}
+
+.cloud-file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cloud-file-name {
+  display: block;
+  font-weight: 500;
+  color: var(--gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cloud-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.cloud-file-meta svg {
+  margin-right: 4px;
+}
+
+.cloud-file-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-file-rename input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.cloud-file-rename button {
+  padding: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-500);
+}
+
+.cloud-file-rename button:hover {
+  color: var(--primary);
+}
+
+.cloud-file-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.cloud-file-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--gray-100);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cloud-file-actions button:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.cloud-file-actions button.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.cloud-file-actions button.primary:hover {
+  background: #365899;
+}
+
+.cloud-file-actions button.danger:hover {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.cloud-file-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Cloud Key Entry UI */
+.cloud-key-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf3 100%);
+}
+
+.cloud-key-form {
+  background: var(--white);
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 420px;
+  width: 100%;
+}
+
+.cloud-key-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.cloud-key-header svg {
+  color: var(--primary);
+  margin-bottom: 16px;
+}
+
+.cloud-key-header h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  color: var(--gray-800);
+}
+
+.cloud-key-header p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+
+.cloud-key-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cloud-key-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-family: monospace;
+  letter-spacing: 2px;
+  text-align: center;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.cloud-key-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.cloud-key-input::placeholder {
+  letter-spacing: 2px;
+  color: var(--gray-400);
+}
+
+.cloud-key-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8d7da;
+  border-radius: var(--radius);
+  color: #721c24;
+  font-size: 13px;
+}
+
+.cloud-key-info {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--gray-200);
+  text-align: center;
+}
+
+.cloud-key-info p {
+  margin: 0;
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+/* Cloud Status Bar (Quota & Expiration) */
+.cloud-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+  font-size: 13px;
+}
+
+.cloud-quota {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-600);
+}
+
+.cloud-quota svg {
+  color: var(--primary);
+}
+
+.cloud-quota-bar {
+  width: 100px;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cloud-quota-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.cloud-quota-fill.warning {
+  background: #dc3545;
+}
+
+.cloud-quota-percent {
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.cloud-expiration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gray-600);
+}
+
+.cloud-expiration svg {
+  color: var(--gray-500);
+}
+
+.cloud-key-preview {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+/* Dark mode key entry */
+.main-layout.dark-mode .cloud-key-entry {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.main-layout.dark-mode .cloud-key-form {
+  background: var(--white);
+}
+
+.main-layout.dark-mode .cloud-status-bar {
+  background: var(--white);
+  border-bottom-color: var(--gray-200);
+}
+
+/* Spinner animation */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Dark mode cloud styles */
+.main-layout.dark-mode .cloud-auth-screen {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.main-layout.dark-mode .cloud-auth-card {
+  background: var(--white);
+}
+
+.main-layout.dark-mode .cloud-auth-header h2 {
+  color: var(--gray-800);
+}
+
+.main-layout.dark-mode .cloud-browser {
+  background: var(--gray-100);
+}
+
+.main-layout.dark-mode .cloud-browser-header {
+  background: var(--white);
+  border-bottom-color: var(--gray-200);
+}
+
+.main-layout.dark-mode .cloud-upload-section {
+  background: var(--white);
+  border-bottom-color: var(--gray-200);
+}
+
+.main-layout.dark-mode .cloud-file-item {
+  background: var(--white);
+  border-color: var(--gray-200);
+}
+
+.main-layout.dark-mode .cloud-file-item:hover {
+  border-color: var(--primary);
+}
+
+.main-layout.dark-mode .cloud-file-actions button {
+  background: var(--gray-200);
+  color: var(--gray-600);
+}
+
+.main-layout.dark-mode .cloud-file-actions button:hover {
+  background: var(--gray-300);
+  color: var(--gray-800);
+}
+
+/* Cloud Panel Overlay (Landing Page) */
+.cloud-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 40px;
+}
+
+.cloud-panel-container {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cloud-panel-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  background: var(--gray-100);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--gray-600);
+  transition: background 0.15s, color 0.15s;
+}
+
+.cloud-panel-close:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+
+.cloud-panel-container .cloud-browser {
+  height: 70vh;
+  max-height: 600px;
+}
+
+.cloud-panel-container .cloud-auth-screen {
+  min-height: auto;
+  padding: 40px;
+}
+
+/* Cloud button on landing page */
+.btn-hero-cloud {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+}
+
+.btn-hero-cloud:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* Dark mode cloud panel */
+body.dark-mode .cloud-panel-container,
+.landing-page.dark-mode .cloud-panel-container {
+  background: #1e1e2e;
+}
+
+body.dark-mode .cloud-panel-close,
+.landing-page.dark-mode .cloud-panel-close {
+  background: #2a2a3c;
+  color: #b0b0c8;
+}
+
+body.dark-mode .cloud-panel-close:hover,
+.landing-page.dark-mode .cloud-panel-close:hover {
+  background: #3a3a4e;
+  color: #e0e0f0;
+}
+
 /* Read-Only Mode Indicator */
 .read-only-banner {
   background: var(--gray-100);
@@ -10951,6 +11873,30 @@ body {
   --primary-dark: #5b6eae;
   --primary-light: #8ea1e8;
   color: var(--gray-900);
+}
+
+/* Global dark mode scrollbar styles */
+.main-layout.dark-mode ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.main-layout.dark-mode ::-webkit-scrollbar-track {
+  background: #1e1e2e;
+  border-radius: 5px;
+}
+
+.main-layout.dark-mode ::-webkit-scrollbar-thumb {
+  background: #3a3a4a;
+  border-radius: 5px;
+}
+
+.main-layout.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #4a4a5a;
+}
+
+.main-layout.dark-mode ::-webkit-scrollbar-corner {
+  background: #1e1e2e;
 }
 
 .main-layout.dark-mode .main-header {
@@ -11897,7 +12843,68 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
+}
+
+/* Custom scrollbar styling */
+.support-graph-main::-webkit-scrollbar,
+.support-graph-canvas-wrapper::-webkit-scrollbar,
+.support-sensitivity-panel::-webkit-scrollbar,
+.sensitivity-table-wrapper::-webkit-scrollbar,
+.support-graph-detail-panel::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.support-graph-main::-webkit-scrollbar-track,
+.support-graph-canvas-wrapper::-webkit-scrollbar-track,
+.support-sensitivity-panel::-webkit-scrollbar-track,
+.sensitivity-table-wrapper::-webkit-scrollbar-track,
+.support-graph-detail-panel::-webkit-scrollbar-track {
+  background: var(--gray-100);
+  border-radius: 5px;
+}
+
+.support-graph-main::-webkit-scrollbar-thumb,
+.support-graph-canvas-wrapper::-webkit-scrollbar-thumb,
+.support-sensitivity-panel::-webkit-scrollbar-thumb,
+.sensitivity-table-wrapper::-webkit-scrollbar-thumb,
+.support-graph-detail-panel::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 5px;
+}
+
+.support-graph-main::-webkit-scrollbar-thumb:hover,
+.support-graph-canvas-wrapper::-webkit-scrollbar-thumb:hover,
+.support-sensitivity-panel::-webkit-scrollbar-thumb:hover,
+.sensitivity-table-wrapper::-webkit-scrollbar-thumb:hover,
+.support-graph-detail-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-400);
+}
+
+/* Dark mode scrollbars */
+.main-layout.dark-mode .support-graph-main::-webkit-scrollbar-track,
+.main-layout.dark-mode .support-graph-canvas-wrapper::-webkit-scrollbar-track,
+.main-layout.dark-mode .support-sensitivity-panel::-webkit-scrollbar-track,
+.main-layout.dark-mode .sensitivity-table-wrapper::-webkit-scrollbar-track,
+.main-layout.dark-mode .support-graph-detail-panel::-webkit-scrollbar-track {
+  background: #1e1e2e;
+}
+
+.main-layout.dark-mode .support-graph-main::-webkit-scrollbar-thumb,
+.main-layout.dark-mode .support-graph-canvas-wrapper::-webkit-scrollbar-thumb,
+.main-layout.dark-mode .support-sensitivity-panel::-webkit-scrollbar-thumb,
+.main-layout.dark-mode .sensitivity-table-wrapper::-webkit-scrollbar-thumb,
+.main-layout.dark-mode .support-graph-detail-panel::-webkit-scrollbar-thumb {
+  background: #3a3a4a;
+}
+
+.main-layout.dark-mode .support-graph-main::-webkit-scrollbar-thumb:hover,
+.main-layout.dark-mode .support-graph-canvas-wrapper::-webkit-scrollbar-thumb:hover,
+.main-layout.dark-mode .support-sensitivity-panel::-webkit-scrollbar-thumb:hover,
+.main-layout.dark-mode .sensitivity-table-wrapper::-webkit-scrollbar-thumb:hover,
+.main-layout.dark-mode .support-graph-detail-panel::-webkit-scrollbar-thumb:hover {
+  background: #4a4a5a;
 }
 
 .support-graph-controls {
@@ -11961,10 +12968,11 @@ body {
 }
 
 .support-graph-canvas-wrapper {
-  flex: 1;
-  overflow: auto;
+  flex-shrink: 0;
+  overflow: visible;
   position: relative;
   background: var(--gray-100);
+  min-height: 200px;
 }
 
 .support-graph-canvas {
@@ -12489,8 +13497,6 @@ body {
   background: var(--white);
   padding: 16px 20px;
   flex-shrink: 0;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 .support-sensitivity-panel h3 {
@@ -12795,6 +13801,10 @@ body.dark-mode .landing-hero {
 
 body.dark-mode .hero-title {
   color: #f3f4f6;
+}
+
+body.dark-mode .hero-founded {
+  color: #9ca3af;
 }
 
 body.dark-mode .hero-subtitle {

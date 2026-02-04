@@ -2,11 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStrategy } from '../contexts/StrategyContext';
 import { useLicense } from '../contexts/LicenseContext';
+import { useCloud } from '../contexts/CloudContext';
+import CloudFileBrowser from './CloudFileBrowser';
 import {
-  Target, FolderOpen, Sparkles, FileText, BarChart3,
+  Target, Sparkles, BarChart3,
   PenTool, TrendingUp, Settings, ChevronLeft, ChevronRight,
-  Play, Layout, Users, PieChart
+  Layout, Users, PieChart, Cloud, X
 } from 'lucide-react';
+import transdataLogo from '../assets/transdata-logo.jpg';
 
 // Screenshot carousel data
 const screenshots = [
@@ -38,22 +41,15 @@ const screenshots = [
 
 function FileSelection() {
   const navigate = useNavigate();
-  const { loadFile, createNewFile, generateSampleFile, isLoading } = useStrategy();
+  const { loadFile, createNewFile, isLoading } = useStrategy();
   const { getCompanyInfo } = useLicense();
-  const [lastFilePath, setLastFilePath] = useState(null);
+  const { isConfigured: isCloudConfigured } = useCloud();
   const [loadError, setLoadError] = useState(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [showCloudPanel, setShowCloudPanel] = useState(false);
 
   const companyInfo = getCompanyInfo();
-
-  useEffect(() => {
-    async function getLastFile() {
-      const path = await window.electronAPI.getLastFilePath();
-      setLastFilePath(path);
-    }
-    getLastFile();
-  }, []);
 
   // Auto-advance carousel
   useEffect(() => {
@@ -79,37 +75,20 @@ function FileSelection() {
     setIsAutoPlaying(false);
   }, []);
 
-  const handleOpenFile = async (filePath = null) => {
+  const handleOpenFile = async (filePath) => {
+    if (!filePath) return;
     setLoadError(null);
-    let path = filePath;
-
-    if (!path) {
-      path = await window.electronAPI.openFileDialog();
-    }
-
-    if (path) {
-      const result = await loadFile(path);
-      if (result.success) {
-        navigate('/main');
-      } else {
-        setLoadError(result.error);
-      }
+    const result = await loadFile(filePath);
+    if (result.success) {
+      navigate('/main');
+    } else {
+      setLoadError(result.error);
     }
   };
 
   const handleCreateNew = async () => {
     setLoadError(null);
     const result = await createNewFile();
-    if (result.success) {
-      navigate('/main');
-    } else if (!result.cancelled) {
-      setLoadError(result.error);
-    }
-  };
-
-  const handleGenerateSample = async () => {
-    setLoadError(null);
-    const result = await generateSampleFile();
     if (result.success) {
       navigate('/main');
     } else if (!result.cancelled) {
@@ -125,25 +104,13 @@ function FileSelection() {
       <section className="landing-hero">
         <div className="hero-content">
           <div className="hero-branding">
-            {companyInfo?.name ? (
-              <>
-                {companyInfo.logo && (
-                  <img
-                    src={companyInfo.logo}
-                    alt={companyInfo.name}
-                    className="hero-logo"
-                    onError={(e) => e.target.style.display = 'none'}
-                  />
-                )}
-                <h1 className="hero-title">{companyInfo.name}</h1>
-              </>
-            ) : (
-              <>
-                <div className="hero-icon"><Target size={56} /></div>
-                <h1 className="hero-title">CPM Strategy Cascade</h1>
-              </>
-            )}
-            <p className="hero-subtitle">Strategy-to-KPI Structuring Platform</p>
+            <img
+              src={transdataLogo}
+              alt="Transdata"
+              className="hero-logo"
+            />
+            <p className="hero-founded">Established 1991</p>
+            <p className="hero-subtitle">CPM Strategy Cascade Platform</p>
             <p className="hero-description">
               Design, structure, and cascade your organization's strategy into measurable KPIs across all business unit levels
             </p>
@@ -157,24 +124,10 @@ function FileSelection() {
 
           {/* Action Buttons */}
           <div className="hero-actions">
-            {lastFilePath && (
-              <div
-                className="last-file-card"
-                onClick={() => handleOpenFile(lastFilePath)}
-              >
-                <div className="last-file-icon"><FileText size={20} /></div>
-                <div className="last-file-info">
-                  <span className="last-file-label">Continue where you left off</span>
-                  <span className="last-file-path">{lastFilePath.split('/').pop() || lastFilePath.split('\\').pop()}</span>
-                </div>
-                <ChevronRight size={20} className="last-file-arrow" />
-              </div>
-            )}
-
             <div className="hero-buttons">
               <button
                 className="btn-hero btn-hero-primary"
-                onClick={() => handleOpenFile()}
+                onClick={handleCreateNew}
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -183,28 +136,40 @@ function FileSelection() {
                     Loading...
                   </>
                 ) : (
-                  <><FolderOpen size={20} /> Open File</>
+                  <><Sparkles size={20} /> New Strategy</>
                 )}
               </button>
 
-              <button
-                className="btn-hero btn-hero-secondary"
-                onClick={handleCreateNew}
-                disabled={isLoading}
-              >
-                <Sparkles size={20} /> New Strategy
-              </button>
-
-              <button
-                className="btn-hero btn-hero-outline"
-                onClick={handleGenerateSample}
-                disabled={isLoading}
-              >
-                <Play size={20} /> Try Demo
-              </button>
+              {isCloudConfigured && (
+                <button
+                  className="btn-hero btn-hero-cloud"
+                  onClick={() => setShowCloudPanel(true)}
+                  disabled={isLoading}
+                >
+                  <Cloud size={20} /> Cloud Storage
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Cloud Panel Overlay */}
+        {showCloudPanel && (
+          <div className="cloud-panel-overlay">
+            <div className="cloud-panel-container">
+              <button
+                className="cloud-panel-close"
+                onClick={() => setShowCloudPanel(false)}
+              >
+                <X size={24} />
+              </button>
+              <CloudFileBrowser onFileOpened={(filePath) => {
+                setShowCloudPanel(false);
+                handleOpenFile(filePath);
+              }} />
+            </div>
+          </div>
+        )}
 
         {/* Screenshot Carousel */}
         <div className="hero-carousel">

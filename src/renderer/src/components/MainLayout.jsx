@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useStrategy } from '../contexts/StrategyContext';
 import { useLicense } from '../contexts/LicenseContext';
+import { useCloud } from '../contexts/CloudContext';
+import transdataLogo from '../assets/transdata-logo.jpg';
 import DashboardTab from './tabs/DashboardTab';
 import StrategyMapTab from './tabs/StrategyMapTab';
 import OrgViewTab from './tabs/OrgViewTab';
@@ -28,13 +30,18 @@ function MainLayout() {
     saveFileAs,
     isSaving,
     closeFile,
-    exportUnencrypted
+    isFromCloud,
+    cloudStoragePath
   } = useStrategy();
   const { getCompanyInfo } = useLicense();
+  const { updateFile, uploadFile } = useCloud();
 
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [activeCategory, setActiveCategory] = useState('design'); // 'design', 'track', 'measure', or 'settings'
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('cpm-dark-mode') === 'true');
+  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
+  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
 
   // Get company info for branding
   const companyInfo = getCompanyInfo();
@@ -78,15 +85,75 @@ function MainLayout() {
   }, [location.pathname]);
 
   const handleSave = async () => {
-    await saveFile();
+    console.log('=== HANDLE SAVE ===');
+    console.log('isFromCloud:', isFromCloud);
+    console.log('cloudStoragePath:', cloudStoragePath);
+    console.log('filePath:', filePath);
+
+    // Save locally first
+    const result = await saveFile();
+    console.log('saveFile result:', result);
+
+    // If file is from cloud, also update in cloud
+    if (result?.success && isFromCloud && cloudStoragePath && filePath) {
+      console.log('Syncing to cloud...');
+      setIsSavingToCloud(true);
+      try {
+        const cloudResult = await updateFile(filePath, cloudStoragePath);
+        console.log('Cloud sync result:', cloudResult);
+        alert('Saved and synced to cloud!');
+      } catch (err) {
+        console.error('Failed to sync to cloud:', err);
+        alert('Saved locally but failed to sync to cloud: ' + err.message);
+      } finally {
+        setIsSavingToCloud(false);
+      }
+    } else {
+      console.log('Not syncing to cloud - conditions not met');
+    }
+  };
+
+  // Save As - open modal to get new name
+  const handleSaveAs = () => {
+    const currentName = fileName.replace(/\.cpme$/, '');
+    setSaveAsName(currentName);
+    setShowSaveAsModal(true);
+  };
+
+  // Actually perform the Save As to cloud
+  const handleSaveAsConfirm = async () => {
+    if (!saveAsName || !saveAsName.trim()) {
+      return;
+    }
+
+    const cleanName = saveAsName.trim();
+    setShowSaveAsModal(false);
+    setIsSavingToCloud(true);
+
+    try {
+      // Save locally first to ensure file is up to date
+      const result = await saveFile();
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to save file');
+      }
+
+      // Upload to cloud with new name
+      await uploadFile(filePath, cleanName);
+      alert(`Saved to cloud as "${cleanName}"!`);
+    } catch (err) {
+      console.error('Failed to save as:', err);
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setIsSavingToCloud(false);
+    }
   };
 
   const handleClose = async () => {
     if (hasUnsavedChanges) {
       const result = await window.electronAPI.showUnsavedWarning();
       if (result === 0) {
-        // Save and close
-        await saveFile();
+        // Save (including cloud sync if from cloud) and close
+        await handleSave();
         closeFile();
         navigate('/');
       } else if (result === 1) {
@@ -148,17 +215,12 @@ function MainLayout() {
           <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} title="Go to previous view">
             ← Back
           </button>
-          {companyInfo?.logo && (
-            <img
-              src={companyInfo.logo}
-              alt={companyInfo.name || 'Company Logo'}
-              className="company-logo-header"
-              onError={(e) => e.target.style.display = 'none'}
-            />
-          )}
-          {companyInfo?.name && (
-            <span className="company-name-header">{companyInfo.name}</span>
-          )}
+          <img
+            src={transdataLogo}
+            alt="Transdata"
+            className="company-logo-header"
+          />
+          <span className="company-name-header">Transdata</span>
           <div className="header-divider"></div>
           <h1 className="file-title">
             {fileName}
@@ -166,29 +228,20 @@ function MainLayout() {
           </h1>
         </div>
         <div className="header-right">
-          {filePath && filePath.endsWith('.cpme') && (
-            <button
-              className="btn btn-ghost"
-              onClick={exportUnencrypted}
-              title="Export as unencrypted Excel file for sharing"
-            >
-              Export .xlsx
-            </button>
-          )}
           <button
             className="btn btn-ghost"
-            onClick={saveFileAs}
-            disabled={isSaving}
-            title="Save with a new filename or convert to encrypted .cpme"
+            onClick={handleSaveAs}
+            disabled={isSaving || isSavingToCloud}
+            title="Save to cloud with a new name"
           >
             Save As
           </button>
           <button
             className="btn btn-primary"
             onClick={handleSave}
-            disabled={isSaving || !hasUnsavedChanges}
+            disabled={isSaving || isSavingToCloud || !hasUnsavedChanges}
           >
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? 'Saving...' : isSavingToCloud ? 'Syncing to Cloud...' : 'Save'}
           </button>
           <button
             className="btn btn-ghost"
@@ -449,6 +502,36 @@ function MainLayout() {
           </main>
         </div>
       </div>
+
+      {/* Save As Modal */}
+      {showSaveAsModal && (
+        <div className="modal-overlay" onClick={() => setShowSaveAsModal(false)}>
+          <div className="modal-content save-as-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Save As</h3>
+            <p>Enter a new name for this file:</p>
+            <input
+              type="text"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+              placeholder="Enter filename"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveAsConfirm();
+                if (e.key === 'Escape') setShowSaveAsModal(false);
+              }}
+            />
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={handleSaveAsConfirm} disabled={!saveAsName.trim()}>
+                Save to Cloud
+              </button>
+              <button className="btn btn-ghost" onClick={() => setShowSaveAsModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

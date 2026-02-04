@@ -13,6 +13,8 @@ export const useStrategy = () => {
 export const StrategyProvider = ({ children }) => {
   // File state
   const [filePath, setFilePath] = useState(null);
+  const [isFromCloud, setIsFromCloud] = useState(false);
+  const [cloudStoragePath, setCloudStoragePath] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -195,6 +197,8 @@ export const StrategyProvider = ({ children }) => {
   // Close file
   const closeFile = useCallback(() => {
     setFilePath(null);
+    setIsFromCloud(false);
+    setCloudStoragePath(null);
     setVisionState({ Statement: '', Statement_AR: '' });
     setMissionState({ Statement: '', Statement_AR: '' });
     setPillars([]);
@@ -323,6 +327,7 @@ export const StrategyProvider = ({ children }) => {
         setFilePath(newPath);
         setHasUnsavedChanges(false);
         await window.electronAPI.setLastFilePath(newPath);
+        return { success: true, filePath: newPath };
       }
       return result;
     } catch (error) {
@@ -1442,92 +1447,13 @@ export const StrategyProvider = ({ children }) => {
   }, [kpis, objectives, businessUnits, pillars, getOrphanedKPIs]);
 
   // ============================================
-  // EXPORT
-  // ============================================
-
-  const exportReport = useCallback(async () => {
-    const defaultName = `Strategy_Report_${new Date().toISOString().split('T')[0]}`;
-    const path = await window.electronAPI.saveFileDialog({ name: defaultName, type: 'xlsx' });
-    if (!path) return { success: false, cancelled: true };
-
-    const data = {
-      vision,
-      mission,
-      pillars: pillars.filter(p => p.Status === 'Active'),
-      perspectives: perspectives.filter(p => p.Status === 'Active'),
-      objectives: objectives.filter(o => o.Status === 'Active'),
-      businessUnits: businessUnits.filter(bu => bu.Status === 'Active'),
-      kpis: kpis.filter(k => k.Review_Status !== 'Retired')
-    };
-
-    return await window.electronAPI.exportStrategyReport(path, data);
-  }, [vision, mission, pillars, perspectives, objectives, businessUnits, kpis]);
-
-  const exportKPICards = useCallback(async (buCode) => {
-    const bu = businessUnits.find(b => b.Code === buCode);
-    const buName = bu?.Name || buCode;
-    const buKPIs = kpis.filter(k =>
-      k.Business_Unit_Code === buCode &&
-      k.Review_Status !== 'Retired' &&
-      k.Review_Status !== 'Pending'
-    );
-
-    if (buKPIs.length === 0) {
-      return { success: false, error: 'No reviewed KPIs to export for this Business Unit' };
-    }
-
-    const defaultName = `${buName.replace(/[^a-zA-Z0-9]/g, '_')}_KPI_Cards`;
-    const outputPath = await window.electronAPI.saveFileDialog({ name: defaultName, type: 'xlsx' });
-    if (!outputPath) return { success: false, cancelled: true };
-
-    return await window.electronAPI.generateKPICards(null, outputPath, buKPIs, buName);
-  }, [businessUnits, kpis]);
-
-  // Export unencrypted .xlsx file (for sharing with users without license)
-  const exportUnencrypted = useCallback(async () => {
-    // Generate default filename from current file path
-    let defaultName = 'Strategy_Export.xlsx';
-    if (filePath) {
-      const currentFileName = filePath.split(/[\\/]/).pop();
-      // Replace .cpme with .xlsx, or add .xlsx if no extension
-      if (currentFileName.endsWith('.cpme')) {
-        defaultName = currentFileName.replace(/\.cpme$/, '.xlsx');
-      } else if (currentFileName.endsWith('.xlsx')) {
-        defaultName = currentFileName.replace(/\.xlsx$/, '_export.xlsx');
-      } else {
-        defaultName = currentFileName + '.xlsx';
-      }
-    }
-
-    const data = {
-      vision,
-      mission,
-      pillars,
-      perspectives,
-      objectives,
-      businessUnits,
-      kpis,
-      objectiveLinks,
-      mapPositions,
-      globalValues,
-      measures,
-      parameterValues,
-      calculatedValues,
-      achievements,
-      teamMembers,
-      personalObjectives,
-      employeeKpis,
-      employeeAchievements,
-      settings,
-      buScorecardConfig
-    };
-
-    return await window.electronAPI.exportUnencrypted(data, defaultName);
-  }, [filePath, vision, mission, pillars, perspectives, objectives, businessUnits, kpis, objectiveLinks, mapPositions, globalValues, measures, parameterValues, calculatedValues, achievements, teamMembers, personalObjectives, employeeKpis, employeeAchievements, settings, buScorecardConfig]);
-
-  // ============================================
   // CONTEXT VALUE
   // ============================================
+
+  const markAsFromCloud = useCallback((storagePath) => {
+    setIsFromCloud(true);
+    setCloudStoragePath(storagePath);
+  }, []);
 
   const value = {
     // File state
@@ -1535,6 +1461,9 @@ export const StrategyProvider = ({ children }) => {
     isLoading,
     isSaving,
     hasUnsavedChanges,
+    isFromCloud,
+    cloudStoragePath,
+    markAsFromCloud,
 
     // Data
     vision,
@@ -1686,12 +1615,7 @@ export const StrategyProvider = ({ children }) => {
     updateEmployeeAchievements,
 
     // Statistics
-    getStats,
-
-    // Export
-    exportReport,
-    exportKPICards,
-    exportUnencrypted
+    getStats
   };
 
   return (

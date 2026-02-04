@@ -409,12 +409,13 @@ function AnalyticsTab() {
   }, [activePositions, graphType]);
 
   const canvasHeight = useMemo(() => {
-    let maxY = 800;
+    let maxY = 0;
     Object.values(activePositions).forEach(p => {
       const bottomEdge = p.y + (graphType === 'decomposition-tree' ? DECOMP_CARD_H + 80 : 80);
       if (bottomEdge > maxY) maxY = bottomEdge;
     });
-    return maxY;
+    // Add minimal padding, no large minimum height
+    return Math.max(maxY + 40, 200);
   }, [activePositions, graphType]);
 
   // ── Sensitivity analysis ──────────────────────────────────────────────

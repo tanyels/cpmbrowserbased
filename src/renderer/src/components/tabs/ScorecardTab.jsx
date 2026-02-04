@@ -408,11 +408,6 @@ function ScorecardTab() {
     }
   };
 
-  // Export functions (placeholder for now)
-  const handleExport = (format) => {
-    alert(`Export to ${format} - Coming soon!`);
-  };
-
   return (
     <div className="scorecard-view">
       {/* Filters */}
@@ -524,14 +519,6 @@ function ScorecardTab() {
             </label>
           </div>
 
-          <div className="filter-group export-group">
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('PDF')}>
-              Export PDF
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('Excel')}>
-              Export Excel
-            </button>
-          </div>
         </div>
       </div>
 

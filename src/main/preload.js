@@ -14,12 +14,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createNewStrategyFile: (filePath) => ipcRenderer.invoke('create-new-strategy-file', filePath),
   generateSampleFile: (filePath) => ipcRenderer.invoke('generate-sample-file', filePath),
 
-  // Export operations
-  exportStrategyReport: (filePath, data) => ipcRenderer.invoke('export-strategy-report', { filePath, data }),
-  generateKPICards: (templatePath, outputPath, kpis, businessUnitName) =>
-    ipcRenderer.invoke('generate-kpi-cards', { templatePath, outputPath, kpis, businessUnitName }),
-  exportUnencrypted: (data, defaultName) => ipcRenderer.invoke('export-unencrypted', { data, defaultName }),
-
   // Dialogs
   showConfirmDialog: (title, message) => ipcRenderer.invoke('show-confirm-dialog', { title, message }),
   showUnsavedWarning: () => ipcRenderer.invoke('show-unsaved-warning'),
@@ -37,5 +31,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clear: () => ipcRenderer.invoke('license:clear'),
     getConfig: () => ipcRenderer.invoke('license:get-config'),
     getCompanyLogo: () => ipcRenderer.invoke('license:get-company-logo')
+  },
+
+  // Cloud storage management (key-based access)
+  cloud: {
+    // Key management
+    isConfigured: () => ipcRenderer.invoke('cloud:is-configured'),
+    validateKey: (accessKey) => ipcRenderer.invoke('cloud:validate-key', accessKey),
+    getKeyStatus: () => ipcRenderer.invoke('cloud:get-key-status'),
+    clearKey: () => ipcRenderer.invoke('cloud:clear-key'),
+
+    // Storage
+    convertAndUpload: (xlsxPath) => ipcRenderer.invoke('cloud:convert-and-upload', xlsxPath),
+    uploadFile: (localPath, displayName) => ipcRenderer.invoke('cloud:upload-file', localPath, displayName),
+    updateFile: (localPath, storagePath) => ipcRenderer.invoke('cloud:update-file', localPath, storagePath),
+    downloadFile: (storagePath, localDestination) => ipcRenderer.invoke('cloud:download-file', storagePath, localDestination),
+    downloadAndOpen: (storagePath, displayName) => ipcRenderer.invoke('cloud:download-and-open', storagePath, displayName),
+    listFiles: () => ipcRenderer.invoke('cloud:list-files'),
+    deleteFile: (storagePath) => ipcRenderer.invoke('cloud:delete-file', storagePath),
+    renameFile: (storagePath, newName) => ipcRenderer.invoke('cloud:rename-file', storagePath, newName)
   }
 });

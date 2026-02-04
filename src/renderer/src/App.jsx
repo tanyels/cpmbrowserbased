@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { StrategyProvider, useStrategy } from './contexts/StrategyContext';
 import { LicenseProvider, useLicense } from './contexts/LicenseContext';
+import { CloudProvider } from './contexts/CloudContext';
 import FileSelection from './components/FileSelection';
 import MainLayout from './components/MainLayout';
 import LicenseScreen from './components/LicenseScreen';
@@ -95,9 +96,11 @@ function App() {
   return (
     <LicenseProvider>
       <LicenseGate>
-        <StrategyProvider>
-          <AppContent />
-        </StrategyProvider>
+        <CloudProvider>
+          <StrategyProvider>
+            <AppContent />
+          </StrategyProvider>
+        </CloudProvider>
       </LicenseGate>
     </LicenseProvider>
   );

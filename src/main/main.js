@@ -2020,3 +2020,178 @@ ipcMain.handle('license:get-company-logo', () => {
     return { success: false, error: error.message };
   }
 });
+
+// ============================================
+// IPC HANDLERS - CLOUD STORAGE (Key-Based)
+// ============================================
+
+const { cloudKeyService } = require('./cloudKeyService');
+const { cloudStorageService } = require('./cloudStorageService');
+
+// Check if cloud is configured
+ipcMain.handle('cloud:is-configured', () => {
+  return cloudKeyService.isConfigured();
+});
+
+// Key: Validate and activate key
+ipcMain.handle('cloud:validate-key', async (event, accessKey) => {
+  try {
+    const result = await cloudKeyService.validateKey(accessKey);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Key: Get current key status
+ipcMain.handle('cloud:get-key-status', async () => {
+  try {
+    const status = await cloudKeyService.getKeyStatus();
+    return { success: true, data: status };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Key: Clear/disconnect key
+ipcMain.handle('cloud:clear-key', async () => {
+  try {
+    cloudKeyService.clearKey();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Convert xlsx to cpme and upload directly
+ipcMain.handle('cloud:convert-and-upload', async (event, xlsxPath) => {
+  const os = require('os');
+  try {
+    if (!xlsxPath.endsWith('.xlsx') && !xlsxPath.endsWith('.xls') && !xlsxPath.endsWith('.xlsm')) {
+      return { success: false, error: 'Please select an Excel file (.xlsx, .xls, or .xlsm)' };
+    }
+
+    // Read the xlsx file
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(xlsxPath);
+
+    // Get original filename for display
+    const originalName = path.basename(xlsxPath, path.extname(xlsxPath));
+
+    // Create temp file path for cpme
+    const tempDir = os.tmpdir();
+    const tempCpmePath = path.join(tempDir, `${originalName}_${Date.now()}.cpme`);
+
+    // Encrypt and save to temp location
+    const buffer = await workbook.xlsx.writeBuffer();
+    const encryptedBuffer = encryptBuffer(buffer);
+    fs.writeFileSync(tempCpmePath, encryptedBuffer);
+
+    // Upload to cloud
+    try {
+      const result = await cloudStorageService.uploadFile(tempCpmePath, originalName);
+
+      // Clean up temp file
+      try {
+        fs.unlinkSync(tempCpmePath);
+      } catch (cleanupErr) {
+        console.warn('Failed to clean up temp file:', cleanupErr);
+      }
+
+      return { success: true, data: result };
+    } catch (uploadErr) {
+      // Clean up temp file on error
+      try {
+        fs.unlinkSync(tempCpmePath);
+      } catch (cleanupErr) {
+        console.warn('Failed to clean up temp file:', cleanupErr);
+      }
+      throw uploadErr;
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Upload File
+ipcMain.handle('cloud:upload-file', async (event, localPath, displayName) => {
+  try {
+    if (!localPath.endsWith('.cpme')) {
+      return { success: false, error: 'Only encrypted .cpme files can be uploaded to cloud' };
+    }
+    const result = await cloudStorageService.uploadFile(localPath, displayName);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Update File (replace existing)
+ipcMain.handle('cloud:update-file', async (event, localPath, storagePath) => {
+  try {
+    if (!localPath.endsWith('.cpme')) {
+      return { success: false, error: 'Only encrypted .cpme files can be uploaded to cloud' };
+    }
+    const result = await cloudStorageService.updateFile(localPath, storagePath);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Download File
+ipcMain.handle('cloud:download-file', async (event, storagePath, localDestination) => {
+  try {
+    const result = await cloudStorageService.downloadFile(storagePath, localDestination);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Download and Open in App
+ipcMain.handle('cloud:download-and-open', async (event, storagePath, displayName) => {
+  const os = require('os');
+  try {
+    // Download to temp location with clean display name
+    const tempDir = os.tmpdir();
+    const cleanName = displayName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const tempPath = path.join(tempDir, `${cleanName}.cpme`);
+
+    await cloudStorageService.downloadFile(storagePath, tempPath);
+
+    return { success: true, filePath: tempPath, displayName: displayName };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: List Files
+ipcMain.handle('cloud:list-files', async () => {
+  try {
+    const files = await cloudStorageService.listFiles();
+    return { success: true, data: files };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Delete File
+ipcMain.handle('cloud:delete-file', async (event, storagePath) => {
+  try {
+    await cloudStorageService.deleteFile(storagePath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Storage: Rename File
+ipcMain.handle('cloud:rename-file', async (event, storagePath, newName) => {
+  try {
+    const result = await cloudStorageService.renameFile(storagePath, newName);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
