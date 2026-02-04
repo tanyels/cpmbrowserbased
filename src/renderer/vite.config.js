@@ -7,8 +7,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // Optimize for production
-    minify: 'terser',
     sourcemap: false,
     rollupOptions: {
       output: {
@@ -26,17 +24,22 @@ export default defineConfig({
   },
   // Define environment for browser
   define: {
-    'process.env': {}
+    'process.env': {},
+    global: 'globalThis'
   },
   // Resolve Node.js modules for browser
   resolve: {
     alias: {
-      // Polyfills for Node.js modules used by exceljs
       stream: 'stream-browserify',
       buffer: 'buffer'
     }
   },
   optimizeDeps: {
-    include: ['buffer', 'exceljs']
+    include: ['buffer', 'exceljs', 'lucide-react'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   }
 });
