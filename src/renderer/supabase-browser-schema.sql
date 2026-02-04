@@ -91,7 +91,7 @@ CREATE POLICY "Allow public deletes" ON storage.objects
 -- Password is hashed using SHA-256. Default: admin / admin123
 -- You should change this immediately after setup!
 INSERT INTO browser_admin (username, password_hash)
-VALUES ('admin', '240be518fabd2724ddb6f04eeb9d5b0680e3c190e88e971e8c1f12a5e18b3a7b')
+VALUES ('admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9')
 ON CONFLICT (username) DO NOTHING;
 
 -- =============================================

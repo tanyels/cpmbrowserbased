@@ -446,13 +446,13 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     // ==========================================
-    // CONFIGURATION - UPDATE THESE VALUES!
+    // CONFIGURATION
     // ==========================================
-    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const SUPABASE_URL = 'https://dacksekeosjkaoqaqzpu.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhY2tzZWtlb3Nqa2FvcWFxenB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMDQxNTQsImV4cCI6MjA4NTc4MDE1NH0.Yd3ObfJB8K3N92IZMOlUE1D4_F-zQHH_rMcilOiM9i4';
     // ==========================================
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let isLoggedIn = false;
 
     // Hash password using SHA-256
@@ -487,7 +487,7 @@
       try {
         const passwordHash = await hashPassword(password);
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from('browser_admin')
           .select('*')
           .eq('username', username)
@@ -501,7 +501,7 @@
         }
 
         // Update last login
-        await supabase
+        await supabaseClient
           .from('browser_admin')
           .update({ last_login: new Date().toISOString() })
           .eq('id', data.id);
@@ -529,7 +529,7 @@
 
       try {
         // Load keys
-        const { data: keys, error: keysError } = await supabase
+        const { data: keys, error: keysError } = await supabaseClient
           .from('browser_access_keys')
           .select('*')
           .order('created_at', { ascending: false });
@@ -537,7 +537,7 @@
         if (keysError) throw keysError;
 
         // Load files count
-        const { count: filesCount } = await supabase
+        const { count: filesCount } = await supabaseClient
           .from('browser_cloud_files')
           .select('*', { count: 'exact', head: true });
 
@@ -627,7 +627,7 @@
       const keyPreview = plainKey.substring(0, 4) + '-****-****-' + plainKey.substring(15);
 
       try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('browser_access_keys')
           .insert({
             key_hash: keyHash,
@@ -650,7 +650,7 @@
     }
 
     async function editKey(keyId) {
-      const { data: key, error } = await supabase
+      const { data: key, error } = await supabaseClient
         .from('browser_access_keys')
         .select('*')
         .eq('id', keyId)
@@ -675,7 +675,7 @@
       const notes = document.getElementById('editKeyNotes').value;
 
       try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('browser_access_keys')
           .update({
             quota_bytes: quotaMB * 1024 * 1024,
@@ -701,18 +701,18 @@
 
       try {
         // Delete associated files from storage first
-        const { data: files } = await supabase
+        const { data: files } = await supabaseClient
           .from('browser_cloud_files')
           .select('storage_path')
           .eq('key_id', keyId);
 
         if (files && files.length > 0) {
           const paths = files.map(f => f.storage_path);
-          await supabase.storage.from('cpm-browser-storage').remove(paths);
+          await supabaseClient.storage.from('cpm-browser-storage').remove(paths);
         }
 
         // Delete key (cascade will delete file metadata)
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('browser_access_keys')
           .delete()
           .eq('id', keyId);
