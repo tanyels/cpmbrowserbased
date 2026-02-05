@@ -358,6 +358,10 @@
         <h3>Total Files</h3>
         <div class="value" id="statTotalFiles">0</div>
       </div>
+      <div class="stat-card">
+        <h3>Total Users</h3>
+        <div class="value" id="statTotalUsers">0</div>
+      </div>
     </div>
 
     <!-- Keys Section -->
@@ -374,6 +378,7 @@
               <th>Key Preview</th>
               <th>Status</th>
               <th>Storage</th>
+              <th>Seats</th>
               <th>Created</th>
               <th>Expires</th>
               <th>Last Used</th>
@@ -381,7 +386,7 @@
             </tr>
           </thead>
           <tbody id="keysTableBody">
-            <tr><td colspan="7" style="text-align:center;">Loading...</td></tr>
+            <tr><td colspan="8" style="text-align:center;">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -403,6 +408,10 @@
       <div class="form-group">
         <label for="keyNotes">Notes (optional)</label>
         <input type="text" id="keyNotes" placeholder="e.g., Client name">
+      </div>
+      <div class="form-group">
+        <label for="keyMaxSeats">Max User Seats</label>
+        <input type="number" id="keyMaxSeats" value="5" min="1" max="100">
       </div>
       <div id="generatedKeyDisplay" class="hidden">
         <p><strong>New Key Generated:</strong></p>
@@ -435,6 +444,10 @@
       <div class="form-group">
         <label for="editKeyNotes">Notes</label>
         <input type="text" id="editKeyNotes">
+      </div>
+      <div class="form-group">
+        <label for="editKeyMaxSeats">Max User Seats</label>
+        <input type="number" id="editKeyMaxSeats" min="1" max="100">
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeModal('editKeyModal')">Cancel</button>
@@ -541,6 +554,11 @@
           .from('browser_cloud_files')
           .select('*', { count: 'exact', head: true });
 
+        // Load users count
+        const { count: usersCount } = await supabaseClient
+          .from('browser_users')
+          .select('*', { count: 'exact', head: true });
+
         // Calculate stats
         const totalKeys = keys?.length || 0;
         const activeKeys = keys?.filter(k => k.is_active).length || 0;
@@ -550,6 +568,7 @@
         document.getElementById('statActiveKeys').textContent = activeKeys;
         document.getElementById('statStorageUsed').textContent = formatBytes(totalStorage);
         document.getElementById('statTotalFiles').textContent = filesCount || 0;
+        document.getElementById('statTotalUsers').textContent = usersCount || 0;
 
         // Render keys table
         renderKeysTable(keys || []);
@@ -563,7 +582,7 @@
       const tbody = document.getElementById('keysTableBody');
 
       if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#666;">No keys yet. Generate your first key!</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;">No keys yet. Generate your first key!</td></tr>';
         return;
       }
 
@@ -579,6 +598,7 @@
               : ''}
           </td>
           <td>${formatBytes(key.used_bytes || 0)} / ${formatBytes(key.quota_bytes || 0)}</td>
+          <td>${key.max_seats || 5}</td>
           <td>${formatDate(key.created_at)}</td>
           <td>${key.expires_at ? formatDate(key.expires_at) : 'Never'}</td>
           <td>${key.last_used_at ? formatDate(key.last_used_at) : 'Never'}</td>
@@ -610,6 +630,7 @@
       document.getElementById('keyQuota').value = '100';
       document.getElementById('keyExpiration').value = '365';
       document.getElementById('keyNotes').value = '';
+      document.getElementById('keyMaxSeats').value = '5';
       document.getElementById('generateKeyModal').style.display = 'flex';
     }
 
@@ -621,6 +642,7 @@
       const quotaMB = parseInt(document.getElementById('keyQuota').value) || 100;
       const expirationDays = parseInt(document.getElementById('keyExpiration').value) || 0;
       const notes = document.getElementById('keyNotes').value;
+      const maxSeats = parseInt(document.getElementById('keyMaxSeats').value) || 5;
 
       const plainKey = generateRandomKey();
       const keyHash = await hashPassword(plainKey); // Using same hash function
@@ -633,7 +655,8 @@
             key_hash: keyHash,
             key_preview: keyPreview,
             quota_bytes: quotaMB * 1024 * 1024,
-            notes: notes || null
+            notes: notes || null,
+            max_seats: maxSeats
           });
 
         if (error) throw error;
@@ -665,6 +688,7 @@
       document.getElementById('editKeyQuota').value = Math.round((key.quota_bytes || 0) / 1024 / 1024);
       document.getElementById('editKeyActive').value = key.is_active ? 'true' : 'false';
       document.getElementById('editKeyNotes').value = key.notes || '';
+      document.getElementById('editKeyMaxSeats').value = key.max_seats || 5;
       document.getElementById('editKeyModal').style.display = 'flex';
     }
 
@@ -680,7 +704,8 @@
           .update({
             quota_bytes: quotaMB * 1024 * 1024,
             is_active: isActive,
-            notes: notes || null
+            notes: notes || null,
+            max_seats: parseInt(document.getElementById('editKeyMaxSeats').value) || 5
           })
           .eq('id', keyId);
 

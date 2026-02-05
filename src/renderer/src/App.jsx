@@ -3,16 +3,18 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { StrategyProvider, useStrategy } from './contexts/StrategyContext';
 import { LicenseProvider } from './contexts/LicenseContext';
 import { CloudProvider, useCloud } from './contexts/CloudContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import FileSelection from './components/FileSelection';
 import MainLayout from './components/MainLayout';
-import LicenseScreen from './components/LicenseScreen';
+import LoginScreen from './components/LoginScreen';
 
 function AppContent() {
   const { filePath } = useStrategy();
-  const { hasValidKey, loading } = useCloud();
+  const { hasValidKey, loading: cloudLoading } = useCloud();
+  const { isAuthenticated, needsAccessKey, loading: authLoading } = useAuth();
 
-  // Show loading spinner while checking key status
-  if (loading) {
+  // Show loading spinner while checking auth/key status
+  if (authLoading || cloudLoading) {
     return (
       <div className="app">
         <div className="loading-screen">
@@ -23,9 +25,9 @@ function AppContent() {
     );
   }
 
-  // Show license screen if no valid key
-  if (!hasValidKey) {
-    return <LicenseScreen />;
+  // Show login screen if not authenticated or needs access key
+  if (!isAuthenticated || needsAccessKey) {
+    return <LoginScreen />;
   }
 
   return (
@@ -50,9 +52,11 @@ function App() {
   return (
     <LicenseProvider>
       <CloudProvider>
-        <StrategyProvider>
-          <AppContent />
-        </StrategyProvider>
+        <AuthProvider>
+          <StrategyProvider>
+            <AppContent />
+          </StrategyProvider>
+        </AuthProvider>
       </CloudProvider>
     </LicenseProvider>
   );

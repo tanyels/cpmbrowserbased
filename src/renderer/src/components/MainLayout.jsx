@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-d
 import { useStrategy } from '../contexts/StrategyContext';
 import { useLicense } from '../contexts/LicenseContext';
 import { useCloud } from '../contexts/CloudContext';
+import { useAuth } from '../contexts/AuthContext';
 import transdataLogo from '../assets/transdata-logo.jpg';
 import DashboardTab from './tabs/DashboardTab';
 import StrategyMapTab from './tabs/StrategyMapTab';
@@ -19,6 +20,7 @@ import EmployeeScorecardView from './tabs/EmployeeScorecardView';
 import AdminTab from './tabs/AdminTab';
 import SupportTab from './tabs/SupportTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
+import UserManagement from './UserManagement';
 
 function MainLayout() {
   const navigate = useNavigate();
@@ -34,7 +36,8 @@ function MainLayout() {
     cloudStoragePath
   } = useStrategy();
   const { getCompanyInfo } = useLicense();
-  const { updateFile, uploadFile } = useCloud();
+  const { updateFile, uploadFile, clearKey } = useCloud();
+  const { user: authUser, isOwner, logout: authLogout } = useAuth();
 
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [activeCategory, setActiveCategory] = useState('design'); // 'design', 'track', 'measure', or 'settings'
@@ -75,7 +78,7 @@ function MainLayout() {
       path.includes('/main/employee-scorecard')
     ) {
       setActiveCategory('measure');
-    } else if (path.includes('/main/admin')) {
+    } else if (path.includes('/main/admin') || path.includes('/main/team')) {
       setActiveCategory('settings');
     } else if (path.includes('/main/analytics')) {
       setActiveCategory('analytics');
@@ -85,20 +88,39 @@ function MainLayout() {
   }, [location.pathname]);
 
   const handleSave = async () => {
+    console.log('=== HANDLE SAVE ===');
+    console.log('isFromCloud:', isFromCloud);
+    console.log('cloudStoragePath:', cloudStoragePath);
+    console.log('filePath:', filePath);
+
     // Save and get the encrypted buffer
     const result = await saveFile();
+    console.log('saveFile result:', result);
 
     // If file is from cloud, also update in cloud
     if (result?.success && result.buffer && isFromCloud && cloudStoragePath) {
+      console.log('Syncing to cloud...');
       setIsSavingToCloud(true);
       try {
-        await updateFile(result.buffer, cloudStoragePath);
+        const cloudResult = await updateFile(result.buffer, cloudStoragePath);
+        console.log('Cloud sync result:', cloudResult);
         alert('Saved and synced to cloud!');
       } catch (err) {
         console.error('Failed to sync to cloud:', err);
-        alert('Saved but failed to sync to cloud: ' + err.message);
+        alert('Saved locally but failed to sync to cloud: ' + err.message);
       } finally {
         setIsSavingToCloud(false);
+      }
+    } else {
+      console.log('Not syncing to cloud - conditions not met:', {
+        success: result?.success,
+        hasBuffer: !!result?.buffer,
+        isFromCloud,
+        cloudStoragePath
+      });
+      // Show feedback for local-only save
+      if (result?.success) {
+        console.log('Saved locally (not from cloud or no storage path)');
       }
     }
   };
@@ -152,6 +174,18 @@ function MainLayout() {
     }
   };
 
+  const handleLogout = async () => {
+    if (hasUnsavedChanges) {
+      const shouldSave = window.confirm('You have unsaved changes. Do you want to save before logging out?');
+      if (shouldSave) {
+        await handleSave();
+      }
+    }
+    closeFile();
+    authLogout();
+    navigate('/');
+  };
+
   // Handle category change
   const handleCategoryChange = (category) => {
     setActiveCategory(category);
@@ -179,18 +213,21 @@ function MainLayout() {
     });
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts - use a ref to avoid stale closure
+  const handleSaveRef = React.useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
   useEffect(() => {
     const handleKeyDown = async (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         console.log('Keyboard save triggered');
-        await saveFile();
+        await handleSaveRef.current();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [saveFile]);
+  }, []);
 
   return (
     <div className={`main-layout${darkMode ? ' dark-mode' : ''}`}>
@@ -212,6 +249,12 @@ function MainLayout() {
           </h1>
         </div>
         <div className="header-right">
+          {authUser && (
+            <div className="header-user-info">
+              <span className="header-user-name">{authUser.display_name}</span>
+              {isOwner && <span className="header-owner-badge">Owner</span>}
+            </div>
+          )}
           <button
             className="btn btn-ghost"
             onClick={handleSaveAs}
@@ -230,9 +273,16 @@ function MainLayout() {
           <button
             className="btn btn-ghost"
             onClick={handleClose}
-            title="Close file and exit"
+            title="Close file and return to file browser"
           >
             Exit
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={handleLogout}
+            title="Logout and clear session"
+          >
+            Logout
           </button>
         </div>
       </header>
@@ -442,6 +492,11 @@ function MainLayout() {
                 <NavLink to="/main/admin" className={({ isActive }) => isActive ? 'nav-tab active' : 'nav-tab'}>
                   Admin Center
                 </NavLink>
+                {isOwner && (
+                  <NavLink to="/main/team" className={({ isActive }) => isActive ? 'nav-tab active' : 'nav-tab'}>
+                    Team Management
+                  </NavLink>
+                )}
               </>
             )}
             {activeCategory === 'analytics' && (
@@ -479,6 +534,7 @@ function MainLayout() {
               <Route path="scorecard" element={<ScorecardTab />} />
               <Route path="employee-scorecard" element={<EmployeeScorecardView />} />
               <Route path="admin" element={<AdminTab />} />
+              <Route path="team" element={<UserManagement />} />
               <Route path="analytics" element={<AnalyticsTab />} />
               <Route path="support" element={<SupportTab />} />
               <Route path="*" element={<DashboardTab />} />

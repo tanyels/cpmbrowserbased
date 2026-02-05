@@ -9423,7 +9423,7 @@ body {
 
 /* Tree Panel */
 .tm-tree-panel {
-  width: 400px;
+  width: 500px;
   flex-shrink: 0;
   background: var(--white);
   border-radius: var(--radius-lg);
@@ -9557,6 +9557,7 @@ body {
 .employee-tree {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
 }
 
@@ -9630,11 +9631,13 @@ body {
 .employee-node-content {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
   border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s;
+  overflow: hidden;
 }
 
 .employee-node-content:hover {
@@ -9724,8 +9727,11 @@ body {
 
 .employee-edit-inline {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .employee-edit-inline input {
@@ -9733,7 +9739,9 @@ body {
   border: 1px solid var(--gray-300);
   border-radius: 4px;
   font-size: 13px;
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 100px;
+  max-width: 100%;
 }
 
 .employee-children {
@@ -14100,5 +14108,454 @@ body.dark-mode .landing-footer {
 
 body.dark-mode .landing-footer p {
   color: #6b7280;
+}
+
+/* ============================================
+   LOGIN SCREEN OVERRIDES
+   ============================================ */
+
+.login-form-divider {
+  height: 1px;
+  background: var(--gray-200);
+  margin: 20px 0;
+}
+
+.license-input-wrapper input[type="password"] {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: normal;
+}
+
+/* ============================================
+   HEADER USER INFO
+   ============================================ */
+
+.header-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  border-right: 1px solid var(--gray-300);
+  margin-right: 4px;
+}
+
+.header-user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.header-owner-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #856404;
+  background: #fff3cd;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   USER MANAGEMENT
+   ============================================ */
+
+.um-container {
+  padding: 24px;
+  max-width: 1000px;
+}
+
+.um-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.um-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.um-header-left h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.um-seat-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.um-seat-count {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.um-seat-label {
+  font-size: 14px;
+  color: var(--gray-600);
+}
+
+.um-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--danger-light);
+  color: #721c24;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.um-error button {
+  background: none;
+  border: none;
+  color: #721c24;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.um-success {
+  background: var(--success-light);
+  color: #155724;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.um-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--gray-600);
+}
+
+.um-no-access {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--gray-600);
+}
+
+.um-no-access svg {
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+
+.um-no-access h3 {
+  font-size: 18px;
+  color: var(--gray-800);
+  margin-bottom: 8px;
+}
+
+/* Users Table */
+.um-table-wrapper {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.um-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.um-table th,
+.um-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+  font-size: 14px;
+}
+
+.um-table th {
+  background: var(--gray-100);
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.um-table tr:last-child td {
+  border-bottom: none;
+}
+
+.um-table tr:hover {
+  background: var(--gray-100);
+}
+
+.um-inactive-row {
+  opacity: 0.5;
+}
+
+.um-user-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.um-date {
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
+.um-table code {
+  background: var(--gray-100);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* Badges */
+.um-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.um-badge-owner {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.um-badge-member {
+  background: #e2e3e5;
+  color: #383d41;
+}
+
+.um-badge-active {
+  background: var(--success-light);
+  color: #155724;
+}
+
+.um-badge-inactive {
+  background: var(--danger-light);
+  color: #721c24;
+}
+
+/* Actions */
+.um-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.um-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.um-btn:hover {
+  background: var(--gray-100);
+}
+
+.um-btn-save {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.um-btn-cancel {
+  border-color: var(--gray-400);
+  color: var(--gray-600);
+}
+
+.um-btn-edit {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.um-btn-delete {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.um-btn-delete:hover {
+  background: var(--danger-light);
+}
+
+.um-btn-deactivate {
+  border-color: var(--warning);
+  color: #856404;
+  font-size: 11px;
+}
+
+.um-btn-activate {
+  border-color: var(--success);
+  color: #155724;
+  font-size: 11px;
+}
+
+.um-edit-input {
+  padding: 4px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: 4px;
+  font-size: 13px;
+  width: 140px;
+}
+
+.um-edit-password {
+  width: 130px;
+}
+
+/* Add Member */
+.um-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--primary);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.um-add-btn:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.um-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.um-add-form {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.um-add-form h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 16px;
+}
+
+.um-form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.um-form-field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.um-form-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.um-form-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.um-form-field input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(68, 114, 196, 0.15);
+}
+
+.um-form-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Dark mode overrides */
+.dark-mode .um-table-wrapper,
+.dark-mode .um-add-form {
+  background: var(--gray-800);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .um-table th {
+  background: var(--gray-900);
+  color: var(--gray-400);
+}
+
+.dark-mode .um-table td {
+  border-bottom-color: var(--gray-700);
+  color: var(--gray-300);
+}
+
+.dark-mode .um-table tr:hover {
+  background: var(--gray-700);
+}
+
+.dark-mode .um-table code {
+  background: var(--gray-700);
+  color: var(--gray-300);
+}
+
+.dark-mode .um-header-left h2 {
+  color: var(--gray-200);
+}
+
+.dark-mode .um-form-field label {
+  color: var(--gray-400);
+}
+
+.dark-mode .um-form-field input {
+  background: var(--gray-700);
+  border-color: var(--gray-600);
+  color: var(--gray-200);
+}
+
+.dark-mode .um-edit-input {
+  background: var(--gray-700);
+  border-color: var(--gray-600);
+  color: var(--gray-200);
+}
+
+.dark-mode .um-btn {
+  background: var(--gray-700);
+  border-color: var(--gray-600);
+}
+
+.dark-mode .um-add-form h3 {
+  color: var(--gray-200);
+}
+
+.dark-mode .header-user-info {
+  border-right-color: var(--gray-600);
+}
+
+.dark-mode .header-user-name {
+  color: var(--gray-300);
 }
 

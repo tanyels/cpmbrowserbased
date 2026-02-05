@@ -28,20 +28,17 @@ export function CloudProvider({ children }) {
     };
   }, []);
 
-  // Initialize and check for saved key
+  // Initialize - check if key service already has a key (set by auth flow)
   useEffect(() => {
     const init = async () => {
       try {
-        const status = await browserKeyService.getKeyStatus();
-        if (status.hasKey) {
-          setKeyStatus(status);
-          // Derive encryption key from access key
-          const savedKey = browserKeyService.getCurrentKey();
-          if (savedKey) {
-            await browserCryptoService.deriveKey(savedKey);
+        const savedKey = browserKeyService.getCurrentKey();
+        if (savedKey) {
+          const status = await browserKeyService.getKeyStatus();
+          if (status.hasKey) {
+            setKeyStatus(status);
+            await loadFilesInternal();
           }
-          // Load files
-          await loadFilesInternal();
         }
       } catch (err) {
         console.error('Cloud init error:', err);

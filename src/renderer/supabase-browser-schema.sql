@@ -87,7 +87,42 @@ CREATE POLICY "Allow public updates" ON storage.objects
 CREATE POLICY "Allow public deletes" ON storage.objects
   FOR DELETE USING (bucket_id = 'cpm-browser-storage');
 
--- 8. Insert default admin (change password after first login!)
+-- 8. Add max_seats column to access keys
+ALTER TABLE browser_access_keys ADD COLUMN IF NOT EXISTS max_seats INTEGER NOT NULL DEFAULT 5;
+
+-- 9. Users table (seat-based login system)
+CREATE TABLE IF NOT EXISTS browser_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key_id UUID NOT NULL REFERENCES browser_access_keys(id) ON DELETE CASCADE,
+  username TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_login_at TIMESTAMP WITH TIME ZONE,
+  UNIQUE(key_id, username)
+);
+
+CREATE INDEX IF NOT EXISTS idx_browser_users_key ON browser_users(key_id);
+CREATE INDEX IF NOT EXISTS idx_browser_users_username ON browser_users(username);
+
+-- Enable RLS on users table
+ALTER TABLE browser_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public select on browser_users" ON browser_users
+  FOR SELECT USING (true);
+
+CREATE POLICY "Allow public insert on browser_users" ON browser_users
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public update on browser_users" ON browser_users
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public delete on browser_users" ON browser_users
+  FOR DELETE USING (true);
+
+-- 10. Insert default admin (change password after first login!)
 -- Password is hashed using SHA-256. Default: admin / admin123
 -- You should change this immediately after setup!
 INSERT INTO browser_admin (username, password_hash)

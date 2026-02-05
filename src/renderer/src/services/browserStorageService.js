@@ -170,8 +170,14 @@ class BrowserStorageService {
   }
 
   async updateFile(fileBuffer, storagePath) {
+    console.log('=== UPDATE FILE ===');
+    console.log('storagePath:', storagePath);
+    console.log('fileBuffer size:', fileBuffer?.byteLength);
+
     const keyId = browserKeyService.getCurrentKeyId();
     const keyData = browserKeyService.getCurrentKeyData();
+
+    console.log('keyId:', keyId);
 
     if (!keyId || !keyData) {
       throw new Error('No valid access key. Please enter your access key first.');
@@ -200,14 +206,16 @@ class BrowserStorageService {
       throw new Error(`Storage quota exceeded. Used: ${usedMB}MB / ${quotaMB}MB. File size: ${fileMB}MB`);
     }
 
-    // Upload to Supabase Storage (update)
-    const { error: uploadError } = await supabase.storage
+    // Upload to Supabase Storage (upsert to replace existing file)
+    console.log('Uploading to Supabase storage...');
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .update(storagePath, fileBuffer, {
+      .upload(storagePath, fileBuffer, {
         contentType: 'application/octet-stream',
-        upsert: true
+        upsert: true  // This will overwrite if exists
       });
 
+    console.log('Upload result:', { uploadData, uploadError });
     if (uploadError) throw uploadError;
 
     // Update metadata

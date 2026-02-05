@@ -129,6 +129,27 @@ class BrowserKeyService {
     localStorage.removeItem(STORAGE_KEY);
   }
 
+  // Validate that a plaintext key matches a specific key_id
+  async validateKeyForKeyId(plainKey, expectedKeyId) {
+    const keyHash = await this.hashKey(plainKey);
+    const { data, error } = await supabase
+      .from('browser_access_keys')
+      .select('id')
+      .eq('key_hash', keyHash)
+      .eq('id', expectedKeyId)
+      .single();
+
+    return !error && !!data;
+  }
+
+  // Initialize service from a known valid key (session restore)
+  async initializeWithKey(plainKey) {
+    const normalizedKey = plainKey.toLowerCase().trim();
+    const keyData = await this._validateAndLoadKey(normalizedKey);
+    this.currentKey = normalizedKey;
+    return keyData;
+  }
+
   async updateUsedBytes(deltaBytes) {
     if (!this.currentKeyData) return;
 

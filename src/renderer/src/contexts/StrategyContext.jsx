@@ -134,6 +134,10 @@ export const StrategyProvider = ({ children }) => {
 
   // Load file from ArrayBuffer (decrypted cloud file)
   const loadFromBuffer = useCallback(async (arrayBuffer, displayName, storagePath) => {
+    console.log('=== LOAD FROM BUFFER ===');
+    console.log('displayName:', displayName);
+    console.log('storagePath:', storagePath);
+
     setIsLoading(true);
     isLoadingRef.current = true;
     try {
@@ -142,6 +146,7 @@ export const StrategyProvider = ({ children }) => {
       setFilePath(displayName);
       setIsFromCloud(true);
       setCloudStoragePath(storagePath);
+      console.log('Set isFromCloud=true, cloudStoragePath=', storagePath);
       setCurrentFileBuffer(arrayBuffer);
 
       setVisionState(data.vision || { Statement: '', Statement_AR: '' });
